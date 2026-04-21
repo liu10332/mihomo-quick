@@ -1,0 +1,21 @@
+# 黑名单配置模板
+
+# 黑名单规则（这些域名/IP走直连）
+rules:
+  # 常见中国网站
+  - DOMAIN-SUFFIX,baidu.com,🎯 全球直连
+  - DOMAIN-SUFFIX,bilibili.com,🎯 全球直连
+  - DOMAIN-SUFFIX,qq.com,🎯 全球直连
+  - DOMAIN-SUFFIX,weixin.qq.com,🎯 全球直连
+  - DOMAIN-SUFFIX,taobao.com,🎯 全球直连
+  - DOMAIN-SUFFIX,jd.com,🎯 全球直连
+  - DOMAIN-SUFFIX,alipay.com,🎯 全球直连
+  - DOMAIN-SUFFIX,weibo.com,🎯 全球直连
+  - DOMAIN-SUFFIX,zhihu.com,🎯 全球直连
+  - DOMAIN-SUFFIX,baike.com,🎯 全球直连
+  
+  # 用户自定义黑名单
+  {{USER_BLACKLIST}}
+  
+  # 其他规则
+  {{OTHER_RULES}}

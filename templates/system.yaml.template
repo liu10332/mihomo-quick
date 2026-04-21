@@ -1,0 +1,14 @@
+# 系统代理配置模板
+# 继承自base.yaml.template
+
+# 系统代理配置
+mixed-port: {{HTTP_PORT}}
+socks-port: {{SOCKS_PORT}}
+allow-lan: true
+bind-address: '*'
+mode: rule
+
+# 系统代理模式下的额外配置
+# 注意：系统代理模式下，TUN配置应该禁用
+tun:
+  enable: false

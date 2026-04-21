@@ -1,0 +1,16 @@
+# 订阅配置模板
+
+# 订阅提供商配置
+proxy-providers:
+  {{PROVIDER_NAME}}:
+    type: http
+    url: "{{PROVIDER_URL}}"
+    interval: {{PROVIDER_INTERVAL}}
+    health-check:
+      enable: true
+      interval: 300
+      url: http://cp.cloudflare.com/generate_204
+    override:
+      skip-cert-verify: true
+    filter: "{{PROVIDER_FILTER}}"
+    exclude: "{{PROVIDER_EXCLUDE}}"

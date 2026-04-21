@@ -1,0 +1,43 @@
+# mihomo-quick 基础配置模板
+# 此文件包含基本配置项，其他模板会继承此配置
+
+# 基本端口配置
+mixed-port: {{HTTP_PORT}}
+socks-port: {{SOCKS_PORT}}
+allow-lan: true
+bind-address: '*'
+mode: rule
+log-level: info
+external-controller: 0.0.0.0:9090
+secret: ''
+external-ui: {{CONFIG_DIR}}/dashboard
+
+# IPv6配置
+ipv6: false
+
+# DNS配置
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+  - '*.lan'
+  - localhost.ptlogin2.qq.com
+  default-nameserver:
+  - 223.5.5.5
+  - 119.29.29.29
+  nameserver:
+  - 223.5.5.5
+  - 119.29.29.29
+  - tls://dns.alidns.com
+  - tls://dot.pub
+
+# 代理配置
+proxies: []
+
+# 代理组配置
+proxy-groups: []
+
+# 规则配置
+rules: []
