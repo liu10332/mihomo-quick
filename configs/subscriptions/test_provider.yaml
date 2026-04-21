@@ -1,0 +1,29 @@
+# 测试订阅
+proxies:
+  - name: "美国节点1"
+    type: ss
+    server: us1.example.com
+    port: 8388
+    cipher: chacha20-ietf-poly1305
+    password: test123
+    udp: true
+    
+  - name: "日本节点1"
+    type: ss
+    server: jp1.example.com
+    port: 8388
+    cipher: chacha20-ietf-poly1305
+    password: test123
+    udp: true
+    
+  - name: "香港节点1"
+    type: vmess
+    server: hk1.example.com
+    port: 443
+    uuid: test-uuid
+    alterId: 0
+    cipher: auto
+    tls: true
+    network: ws
+    ws-opts:
+      path: /ray
