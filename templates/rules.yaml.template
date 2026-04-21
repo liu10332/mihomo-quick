@@ -16,10 +16,13 @@ rules:
   - IP-CIDR,fe80::/10,DIRECT
   
   # 中国IP
-  - GEOIP,CN,🎯 全球直连
+  - GEOIP,CN,{{CHINA_PROXY_GROUP}}
   
   # 用户自定义规则
   {{USER_RULES}}
   
+  # 广告拦截规则
+  {{AD_BLOCKING_RULES}}
+  
   # 默认规则
-  - MATCH,🚀 节点选择
+  - MATCH,{{DEFAULT_PROXY_GROUP}}

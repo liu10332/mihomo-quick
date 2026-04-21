@@ -8,9 +8,26 @@ proxy-providers:
     interval: {{PROVIDER_INTERVAL}}
     health-check:
       enable: true
-      interval: 300
-      url: http://cp.cloudflare.com/generate_204
+      interval: {{HEALTH_CHECK_INTERVAL}}
+      url: {{HEALTH_CHECK_URL}}
     override:
-      skip-cert-verify: true
+      skip-cert-verify: {{SKIP_CERT_VERIFY}}
     filter: "{{PROVIDER_FILTER}}"
     exclude: "{{PROVIDER_EXCLUDE}}"
+    
+# 订阅组配置
+proxy-groups:
+  - name: "{{PROVIDER_NAME}} 节点"
+    type: select
+    use:
+      - {{PROVIDER_NAME}}
+    filter: "{{PROVIDER_FILTER}}"
+    
+  - name: "{{PROVIDER_NAME}} 自动选择"
+    type: url-test
+    url: {{HEALTH_CHECK_URL}}
+    interval: {{HEALTH_CHECK_INTERVAL}}
+    tolerance: {{TOLERANCE}}
+    lazy: true
+    use:
+      - {{PROVIDER_NAME}}

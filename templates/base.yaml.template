@@ -4,34 +4,36 @@
 # 基本端口配置
 mixed-port: {{HTTP_PORT}}
 socks-port: {{SOCKS_PORT}}
-allow-lan: true
-bind-address: '*'
-mode: rule
-log-level: info
-external-controller: 0.0.0.0:9090
-secret: ''
+allow-lan: {{ALLOW_LAN}}
+bind-address: '{{BIND_ADDRESS}}'
+mode: {{MODE}}
+log-level: {{LOG_LEVEL}}
+external-controller: {{API_ADDRESS}}:{{API_PORT}}
+secret: '{{API_SECRET}}'
 external-ui: {{CONFIG_DIR}}/dashboard
 
 # IPv6配置
-ipv6: false
+ipv6: {{IPV6_ENABLED}}
 
 # DNS配置
 dns:
-  enable: true
-  ipv6: false
-  enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
+  enable: {{DNS_ENABLED}}
+  ipv6: {{DNS_IPV6}}
+  enhanced-mode: {{DNS_MODE}}
+  fake-ip-range: {{FAKE_IP_RANGE}}
   fake-ip-filter:
-  - '*.lan'
-  - localhost.ptlogin2.qq.com
+  {{FAKE_IP_FILTER}}
   default-nameserver:
-  - 223.5.5.5
-  - 119.29.29.29
+  {{DEFAULT_DNS}}
   nameserver:
-  - 223.5.5.5
-  - 119.29.29.29
-  - tls://dns.alidns.com
-  - tls://dot.pub
+  {{NAMESERVER}}
+  fallback:
+  {{FALLBACK_DNS}}
+  fallback-filter:
+    geoip: {{FALLBACK_GEOIP}}
+    geoip-code: {{FALLBACK_GEOIP_CODE}}
+    ipcidr:
+    {{FALLBACK_IPCIDR}}
 
 # 代理配置
 proxies: []
@@ -41,3 +43,21 @@ proxy-groups: []
 
 # 规则配置
 rules: []
+
+# 日志配置
+log-level: {{LOG_LEVEL}}
+
+# 全局配置
+global-client-fingerprint: {{CLIENT_FINGERPRINT}}
+
+# 流量嗅探
+sniffing:
+  enable: {{SNIFFING_ENABLED}}
+  dest-ports:
+  {{SNIFFING_PORTS}}
+  override-destination: {{SNIFFING_OVERRIDE}}
+
+# 实验性配置
+experimental:
+  quic-go-disable-gso: {{QUIC_DISABLE_GSO}}
+  quic-go-disable-ecn: {{QUIC_DISABLE_ECN}}
