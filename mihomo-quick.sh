@@ -190,7 +190,7 @@ load_all_modules() {
     create_dir "$LIB_DIR"
     
     # 模块列表
-    local modules=("utils" "config" "subscription" "service" "mode")
+    local modules=("utils" "config" "subscription" "subscription_config" "service" "mode")
     
     for module in "${modules[@]}"; do
         if [[ -f "${LIB_DIR}/${module}.sh" ]]; then
@@ -250,22 +250,26 @@ handle_main_menu() {
             load_module "subscription" && show_subscription_menu
             ;;
         4)
+            log_info "进入订阅配置..."
+            load_module "subscription_config" && subscription_config_menu
+            ;;
+        5)
             log_info "进入配置管理..."
             load_module "config" && show_config_menu
             ;;
-        5)
+        6)
             log_info "进入服务管理..."
             load_module "service" && show_service_menu
             ;;
-        6)
+        7)
             log_info "打开Web面板..."
             open_dashboard
             ;;
-        7)
+        8)
             log_info "执行系统检查..."
             check_system
             ;;
-        8)
+        9)
             show_help
             ;;
         0)
