@@ -4,65 +4,71 @@
 
 ## 功能特点
 
-- 🚀 **快速部署**：一键安装，开箱即用
-- 🔄 **多模式支持**：TUN/System/TAP/Mixed 四种代理模式
-- 📡 **智能订阅**：多源订阅、自动更新、故障转移
-- ⚙️ **交互配置**：向导式配置生成，黑白名单管理
-- 🌐 **Web面板**：集成mihomo-dashboard，Web界面管理
-- 🛡️ **稳定可靠**：健康检查、故障转移、自动恢复
+- 🚀 **快速部署**: 一键安装，开箱即用
+- 🔄 **多模式支持**: TUN/System/TAP/Mixed 四种代理模式
+- 📡 **智能订阅**: 多源订阅、自动更新、故障转移
+- ⚙️ **交互配置**: 向导式配置生成，黑白名单管理
+- 🌐 **Web面板**: 集成mihomo-dashboard，Web界面管理
+- 🛡️ **稳定可靠**: 健康检查、故障转移、自动恢复
 
 ## 系统要求
 
 - Linux操作系统 (Ubuntu 18.04+, CentOS 7+, Debian 9+)
 - Bash 4.0+
 - curl, jq, tar, systemctl
+- root权限（用于TUN模式）
 
 ## 快速安装
 
-### 方式1：克隆安装
+### 方式1：一键安装
+```bash
+curl -fsSL https://raw.githubusercontent.com/your-username/mihomo-quick/main/install.sh | bash
+```
+
+### 方式2：手动安装
 ```bash
 git clone https://github.com/your-username/mihomo-quick.git
 cd mihomo-quick
 ./install.sh
 ```
 
-### 方式2：一键安装
+### 方式3：自定义安装
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-username/mihomo-quick/main/install.sh | bash
+./install.sh -d /opt/mihomo-quick -m tun -p 8080
 ```
 
 ## 使用方法
 
 ### 启动管理菜单
 ```bash
-./mihomo-quick.sh
+mihomo-quick
 ```
 
 ### 命令行使用
 ```bash
 # 服务管理
-./mihomo-quick.sh start    # 启动服务
-./mihomo-quick.sh stop     # 停止服务
-./mihomo-quick.sh restart  # 重启服务
-./mihomo-quick.sh status   # 查看状态
+mihomo-quick start    # 启动服务
+mihomo-quick stop     # 停止服务
+mihomo-quick restart  # 重启服务
+mihomo-quick status   # 查看状态
 
 # 配置管理
-./mihomo-quick.sh config   # 配置向导
-./mihomo-quick.sh export   # 导出配置
-./mihomo-quick.sh import   # 导入配置
+mihomo-quick config   # 配置向导
+mihomo-quick export   # 导出配置
+mihomo-quick import   # 导入配置
 
 # 订阅管理
-./mihomo-quick.sh sub      # 订阅管理
-./mihomo-quick.sh update   # 更新订阅
-./mihomo-quick.sh test     # 测试节点
+mihomo-quick sub      # 订阅管理
+mihomo-quick update   # 更新订阅
+mihomo-quick test     # 测试节点
 
 # 模式管理
-./mihomo-quick.sh mode     # 切换代理模式
-./mihomo-quick.sh tun      # 切换到TUN模式
-./mihomo-quick.sh system   # 切换到系统代理模式
+mihomo-quick mode     # 切换代理模式
+mihomo-quick tun      # 切换到TUN模式
+mihomo-quick system   # 切换到系统代理模式
 
 # Web面板
-./mihomo-quick.sh dashboard # 打开Web面板
+mihomo-quick dashboard # 打开Web面板
 ```
 
 ## 配置说明
@@ -146,13 +152,13 @@ mihomo-quick/
 ### 节点健康检查
 ```bash
 # 测试所有节点
-./mihomo-quick.sh test
+mihomo-quick test
 
 # 测试指定节点
-./mihomo-quick.sh test --node "美国节点"
+mihomo-quick test --node "美国节点"
 
 # 自动排除无效节点
-./mihomo-quick.sh test --auto-disable
+mihomo-quick test --auto-disable
 ```
 
 ### 故障转移配置
@@ -179,17 +185,17 @@ proxy-groups:
 ### 黑白名单管理
 ```bash
 # 添加白名单
-./mihomo-quick.sh whitelist add google.com
+mihomo-quick whitelist add google.com
 
 # 添加黑名单
-./mihomo-quick.sh blacklist add baidu.com
+mihomo-quick blacklist add baidu.com
 
 # 查看列表
-./mihomo-quick.sh list
+mihomo-quick list
 
 # 导入导出
-./mihomo-quick.sh export-list
-./mihomo-quick.sh import-list
+mihomo-quick export-list
+mihomo-quick import-list
 ```
 
 ## 故障排查
@@ -197,37 +203,37 @@ proxy-groups:
 ### 服务无法启动
 ```bash
 # 查看日志
-./mihomo-quick.sh logs
+mihomo-quick logs
 
 # 检查配置
-./mihomo-quick.sh check
+mihomo-quick check
 
 # 测试配置
-./mihomo-quick.sh test-config
+mihomo-quick test-config
 ```
 
 ### 订阅更新失败
 ```bash
 # 手动更新
-./mihomo-quick.sh update --force
+mihomo-quick update --force
 
 # 测试订阅
-./mihomo-quick.sh test-sub
+mihomo-quick test-sub
 
 # 查看订阅状态
-./mihomo-quick.sh sub-status
+mihomo-quick sub-status
 ```
 
 ### 节点连接失败
 ```bash
 # 测试节点
-./mihomo-quick.sh test --node "节点名称"
+mihomo-quick test --node "节点名称"
 
 # 排除节点
-./mihomo-quick.sh disable --node "节点名称"
+mihomo-quick disable --node "节点名称"
 
 # 重新启用
-./mihomo-quick.sh enable --node "节点名称"
+mihomo-quick enable --node "节点名称"
 ```
 
 ## 贡献指南
@@ -258,3 +264,4 @@ proxy-groups:
 ---
 
 **最后更新**: 2026-04-21
+**版本**: 1.0.0
