@@ -1,0 +1,33 @@
+# 订阅配置模板
+
+# 订阅提供商配置
+proxy-providers:
+  {{PROVIDER_NAME}}:
+    type: http
+    url: "{{PROVIDER_URL}}"
+    interval: {{PROVIDER_INTERVAL}}
+    health-check:
+      enable: true
+      interval: {{HEALTH_CHECK_INTERVAL}}
+      url: {{HEALTH_CHECK_URL}}
+    override:
+      skip-cert-verify: {{SKIP_CERT_VERIFY}}
+    filter: "{{PROVIDER_FILTER}}"
+    exclude: "{{PROVIDER_EXCLUDE}}"
+    
+# 订阅组配置
+proxy-groups:
+  - name: "{{PROVIDER_NAME}} 节点"
+    type: select
+    use:
+      - {{PROVIDER_NAME}}
+    filter: "{{PROVIDER_FILTER}}"
+    
+  - name: "{{PROVIDER_NAME}} 自动选择"
+    type: url-test
+    url: {{HEALTH_CHECK_URL}}
+    interval: {{HEALTH_CHECK_INTERVAL}}
+    tolerance: {{TOLERANCE}}
+    lazy: true
+    use:
+      - {{PROVIDER_NAME}}

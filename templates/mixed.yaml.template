@@ -1,0 +1,20 @@
+# 混合模式配置模板
+# 继承自base.yaml.template
+
+# 混合模式配置（同时支持系统代理和TUN）
+mixed-port: {{HTTP_PORT}}
+socks-port: {{SOCKS_PORT}}
+allow-lan: true
+bind-address: '*'
+mode: rule
+
+# TUN配置（可选启用）
+tun:
+  enable: {{TUN_ENABLED}}
+  stack: system
+  dns-hijack:
+    - any:53
+  auto-route: true
+  auto-detect-interface: true
+  device: {{TUN_DEVICE}}
+  mtu: 9000
