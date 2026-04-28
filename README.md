@@ -7,6 +7,8 @@
 - 🚀 **快速部署**: 一键安装，开箱即用，自动下载 MetaCubeXD Web 面板
 - 🔄 **多模式支持**: TUN/System/TAP/Mixed 四种代理模式，切换时自动保留订阅和规则
 - 📡 **智能订阅**: 多源订阅、自动更新（代理可用时自动走代理）、代理链下载
+- ⭐ **订阅优先级**: 设置主订阅优先使用，备用订阅故障转移，自动切换
+- 📋 **黑白名单**: 灵活的规则管理，支持走代理和排除代理的域名/IP
 - ⚙️ **三层代理组**: url-test 自动选择 + fallback 智能切换 + select 手动选择
 - 🌐 **Web面板**: 自动安装 MetaCubeXD，访问 `http://127.0.0.1:9090/ui`
 - 🛡️ **AI API直连**: 大模型 API 自动直连（anthropic、openai、volces 等），不走代理
@@ -73,6 +75,46 @@ mihomo-quick mode tun       # TUN 模式（透明代理）
 mihomo-quick mode system    # 系统代理模式
 mihomo-quick mode mixed     # 混合模式
 mihomo-quick mode tap       # TAP 模式
+```
+
+#### 规则管理（黑白名单）
+```bash
+mihomo-quick rules show                          # 查看当前规则
+mihomo-quick rules add-proxy DOMAIN-SUFFIX,openai.com   # 添加走代理的规则
+mihomo-quick rules add-direct DOMAIN-SUFFIX,baidu.com   # 添加排除代理的规则（直连）
+mihomo-quick rules add-direct IP-CIDR,10.0.0.0/8       # 添加IP段直连
+mihomo-quick rules del DOMAIN-SUFFIX,openai.com         # 删除规则
+mihomo-quick rules list                          # 列出所有自定义规则
+mihomo-quick rules mode whitelist                # 切换到白名单模式
+mihomo-quick rules mode blacklist                # 切换到黑名单模式
+mihomo-quick rules import rules.txt             # 导入规则文件
+mihomo-quick rules export                        # 导出规则文件
+```
+
+#### 订阅优先级（故障转移）
+```bash
+mihomo-quick priority show               # 查看订阅优先级
+mihomo-quick priority set provider-a     # 设置主订阅（优先使用）
+mihomo-quick priority backup provider-b  # 添加备用订阅
+mihomo-quick priority rm-backup provider-b  # 移除备用订阅
+mihomo-quick priority apply              # 应用优先级配置
+mihomo-quick priority test               # 测试故障转移
+```
+
+#### 环境变量代理
+```bash
+mihomo-quick proxy-env on        # 启用代理环境变量
+mihomo-quick proxy-env off       # 禁用代理环境变量
+mihomo-quick proxy-env status    # 查看当前状态
+mihomo-quick proxy-env test      # 测试代理连接
+mihomo-quick proxy-env config    # 配置代理参数
+mihomo-quick proxy-env npm-on    # 启用 npm 代理
+mihomo-quick proxy-env npm-off   # 禁用 npm 代理
+```
+
+#### 综合代理测试
+```bash
+mihomo-quick test-all            # 综合测试直连、代理、外网访问
 ```
 
 #### Web 面板
@@ -173,6 +215,50 @@ rules:
   - MATCH,🔄 智能切换
 ```
 
+### 订阅优先级与故障转移
+
+支持设置主订阅优先使用，备用订阅故障自动切换：
+
+```bash
+# 设置主订阅（优先使用）
+mihomo-quick priority set provider-a
+
+# 添加备用订阅
+mihomo-quick priority backup provider-b
+mihomo-quick priority backup provider-c
+
+# 应用配置（生成故障转移代理组）
+mihomo-quick priority apply
+```
+
+应用后生成的代理组架构：
+- ⭐ **主订阅节点** → url-test（主订阅自动选择最快节点）
+- 🔄 **故障转移** → fallback（主订阅不可用时按顺序切换备用）
+- 📱 **综合选择** → select（手动选择或使用自动）
+
+### 黑白名单规则管理
+
+灵活管理哪些域名/IP走代理、哪些排除代理：
+
+```bash
+# 添加走代理的规则
+mihomo-quick rules add-proxy DOMAIN-SUFFIX,openai.com
+mihomo-quick rules add-proxy DOMAIN-KEYWORD,google
+
+# 添加排除代理的规则（直连）
+mihomo-quick rules add-direct DOMAIN-SUFFIX,baidu.com
+mihomo-quick rules add-direct IP-CIDR,10.0.0.0/8
+
+# 切换规则模式
+mihomo-quick rules mode whitelist  # 白名单模式（只有列表中的走代理）
+mihomo-quick rules mode blacklist  # 黑名单模式（列表中的直连，其他走代理）
+
+# 查看和管理规则
+mihomo-quick rules list            # 列出自定义规则
+mihomo-quick rules show            # 查看所有规则
+mihomo-quick rules del <规则>      # 删除规则
+```
+
 ### 订阅配置
 
 ```yaml
@@ -204,8 +290,11 @@ mihomo-quick/
 │   ├── config_wizard.sh    # 配置向导（三层代理组 + 完整规则）
 │   ├── subscription.sh     # 订阅管理（支持代理链）
 │   ├── subscription_config.sh  # 订阅配置生成
+│   ├── subscription_manager.sh # 订阅解析与存储
+│   ├── subscription_priority.sh # 订阅优先级与故障转移
 │   ├── service.sh          # 服务管理（npm 代理自动管理）
 │   ├── mode.sh             # 模式切换
+│   ├── rules.sh            # 规则管理（黑白名单）
 │   ├── node_health.sh      # 节点健康检查
 │   ├── template.sh         # 模板处理
 │   └── utils.sh            # 工具函数
@@ -315,4 +404,4 @@ bash scripts/proxy-env.sh status  # 查看代理环境变量
 ---
 
 **最后更新**: 2026-04-29
-**版本**: 1.1.0
+**版本**: 1.2.0

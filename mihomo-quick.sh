@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # mihomo-quick - 轻量级mihomo快速部署工具
-# 版本: 1.0.0
+# 版本: 1.2.0
 # 作者: mihomo-quick
 # 许可证: MIT
 #
@@ -17,7 +17,7 @@ set -e
 # ============================================================================
 
 # 版本信息
-VERSION="1.1.0"
+VERSION="1.2.0"
 AUTHOR="mihomo-quick"
 LICENSE="MIT"
 
@@ -190,7 +190,7 @@ load_all_modules() {
     create_dir "$LIB_DIR"
     
     # 模块列表
-    local modules=("utils" "config" "subscription" "subscription_config" "service" "mode")
+    local modules=("utils" "config" "subscription" "subscription_config" "subscription_priority" "service" "mode" "rules")
     
     for module in "${modules[@]}"; do
         if [[ -f "${LIB_DIR}/${module}.sh" ]]; then
@@ -225,8 +225,12 @@ show_main_menu() {
     echo -e "  ${GREEN}4${NC}. 配置管理"
     echo -e "  ${GREEN}5${NC}. 服务管理"
     echo -e "  ${GREEN}6${NC}. Web面板"
-    echo -e "  ${GREEN}7${NC}. 系统检查"
-    echo -e "  ${GREEN}8${NC}. 帮助信息"
+    echo -e "  ${GREEN}7${NC}. 规则管理（黑白名单）"
+    echo -e "  ${GREEN}8${NC}. 订阅优先级（故障转移）"
+    echo -e "  ${GREEN}9${NC}. 环境变量代理"
+    echo -e "  ${GREEN}10${NC}. 综合代理测试"
+    echo -e "  ${GREEN}11${NC}. 系统检查"
+    echo -e "  ${GREEN}12${NC}. 帮助信息"
     echo -e "  ${GREEN}0${NC}. 退出"
     echo ""
     echo -e "${CYAN}══════════════════════════════════════════════════════════════${NC}"
@@ -343,10 +347,26 @@ handle_main_menu() {
             open_dashboard
             ;;
         7)
+            log_info "进入规则管理..."
+            load_module "rules" && show_rules_menu
+            ;;
+        8)
+            log_info "进入订阅优先级管理..."
+            load_module "subscription_priority" && show_priority_menu
+            ;;
+        9)
+            log_info "环境变量代理管理..."
+            manage_proxy_env
+            ;;
+        10)
+            log_info "综合代理测试..."
+            run_test_all_proxy
+            ;;
+        11)
             log_info "执行系统检查..."
             check_system
             ;;
-        9)
+        12)
             show_help
             ;;
         0)
@@ -383,6 +403,10 @@ show_help() {
     echo "  config         配置向导"
     echo "  sub            订阅管理"
     echo "  mode           模式切换"
+    echo "  rules          规则管理（黑白名单）"
+    echo "  priority       订阅优先级（故障转移）"
+    echo "  proxy-env      环境变量代理管理"
+    echo "  test-all       综合代理测试"
     echo "  dashboard      打开面板"
     echo "  logs           查看日志"
     echo "  test           测试节点"
@@ -400,6 +424,12 @@ show_help() {
     echo "  ./mihomo-quick.sh start          # 启动服务"
     echo "  ./mihomo-quick.sh config         # 配置向导"
     echo "  ./mihomo-quick.sh sub add url    # 添加订阅"
+    echo "  ./mihomo-quick.sh rules add-direct DOMAIN-SUFFIX,baidu.com  # 添加直连规则"
+    echo "  ./mihomo-quick.sh rules add-proxy DOMAIN-SUFFIX,openai.com  # 添加代理规则"
+    echo "  ./mihomo-quick.sh priority set provider-a   # 设置主订阅"
+    echo "  ./mihomo-quick.sh priority apply            # 应用优先级"
+    echo "  ./mihomo-quick.sh proxy-env on              # 启用代理环境变量"
+    echo "  ./mihomo-quick.sh test-all                  # 综合代理测试"
     echo ""
     echo -e "${WHITE}更多信息:${NC}"
     echo "  项目地址: https://github.com/your-username/mihomo-quick"
@@ -483,6 +513,88 @@ confirm_exit() {
 }
 
 # ============================================================================
+# 环境变量代理管理（集成 proxy-env.sh）
+# ============================================================================
+
+manage_proxy_env() {
+    local action="$1"
+    shift
+    
+    local proxy_env_script="${SCRIPT_DIR}/scripts/proxy-env.sh"
+    
+    if [[ ! -f "$proxy_env_script" ]]; then
+        log_error "proxy-env.sh 脚本不存在"
+        return 1
+    fi
+    
+    case "$action" in
+        on|start|off|stop|status|test|config|npm-on|npm-off)
+            bash "$proxy_env_script" "$action" "$@"
+            ;;
+        "")
+            # 交互式菜单
+            clear
+            echo -e "${CYAN}"
+            echo "╔══════════════════════════════════════════════════════════════╗"
+            echo "║                  环境变量代理管理                           ║"
+            echo "╚══════════════════════════════════════════════════════════════╝"
+            echo -e "${NC}"
+            echo ""
+            echo -e "${WHITE}请选择操作:${NC}"
+            echo ""
+            echo -e "  ${GREEN}1${NC}. 启用代理环境变量"
+            echo -e "  ${GREEN}2${NC}. 禁用代理环境变量"
+            echo -e "  ${GREEN}3${NC}. 查看当前状态"
+            echo -e "  ${GREEN}4${NC}. 测试代理连接"
+            echo -e "  ${GREEN}5${NC}. 配置代理参数"
+            echo -e "  ${GREEN}6${NC}. 启用 npm 代理"
+            echo -e "  ${GREEN}7${NC}. 禁用 npm 代理"
+            echo -e "  ${GREEN}0${NC}. 返回主菜单"
+            echo ""
+            echo -e "${CYAN}══════════════════════════════════════════════════════════════${NC}"
+            
+            read -p "请输入选择 (0-7): " env_choice
+            
+            case $env_choice in
+                1) bash "$proxy_env_script" on ;;
+                2) bash "$proxy_env_script" off ;;
+                3) bash "$proxy_env_script" status ;;
+                4) bash "$proxy_env_script" test ;;
+                5) bash "$proxy_env_script" config ;;
+                6) bash "$proxy_env_script" npm-on ;;
+                7) bash "$proxy_env_script" npm-off ;;
+                0) return ;;
+                *) log_error "无效选择"; sleep 1 ;;
+            esac
+            
+            echo ""
+            read -p "按 Enter 键返回..."
+            manage_proxy_env
+            ;;
+        *)
+            log_error "未知操作: $action"
+            echo "用法: mihomo-quick.sh proxy-env [on|off|status|test|config|npm-on|npm-off]"
+            return 1
+            ;;
+    esac
+}
+
+# ============================================================================
+# 综合代理测试（集成 test-all-proxy.sh）
+# ============================================================================
+
+run_test_all_proxy() {
+    local test_script="${SCRIPT_DIR}/scripts/test-all-proxy.sh"
+    
+    if [[ ! -f "$test_script" ]]; then
+        log_error "test-all-proxy.sh 脚本不存在"
+        return 1
+    fi
+    
+    bash "$test_script"
+}
+
+# ============================================================================
 # 主函数
 # ============================================================================
 
@@ -503,7 +615,7 @@ parse_args() {
                 log_debug "调试模式已启用"
                 shift
                 ;;
-            start|stop|restart|status|config|sub|mode|dashboard|logs|test|update|help|version)
+            start|stop|restart|status|config|sub|mode|rules|priority|proxy-env|test-all|dashboard|logs|test|update|help|version)
                 # 快捷命令
                 handle_short_command "$1" "${@:2}"
                 exit $?
@@ -554,6 +666,22 @@ handle_short_command() {
             log_info "模式切换..."
             load_module "mode" && handle_mode_command "$@"
             ;;
+        rules)
+            log_info "规则管理..."
+            load_module "rules" && handle_rules_command "$@"
+            ;;
+        priority)
+            log_info "订阅优先级..."
+            load_module "subscription_priority" && handle_priority_command "$@"
+            ;;
+        proxy-env)
+            log_info "环境变量代理..."
+            manage_proxy_env "$@"
+            ;;
+        test-all)
+            log_info "综合代理测试..."
+            run_test_all_proxy
+            ;;
         dashboard)
             open_dashboard
             ;;
@@ -587,7 +715,7 @@ handle_short_command() {
 main_loop() {
     while true; do
         show_main_menu
-        read -p "请输入选择 (0-8): " choice
+        read -p "请输入选择 (0-12): " choice
         handle_main_menu "$choice"
     done
 }
