@@ -1,0 +1,285 @@
+#!/bin/bash
+# mihomo-rules - 查看和管理代理规则
+
+CONFIG_DIR="${HOME}/.config/mihomo"
+CONFIG_FILE="$CONFIG_DIR/config.yaml"
+OPENCLAW_CONFIG="${HOME}/.openclaw/openclaw.json"
+
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+NC='\033[0m'
+
+# 备份
+backup_config() {
+    if [ -f "$CONFIG_FILE" ]; then
+        local backup_dir="$CONFIG_DIR/backups"
+        mkdir -p "$backup_dir"
+        cp "$CONFIG_FILE" "$backup_dir/config.yaml.$(date +%Y%m%d_%H%M%S).bak"
+    fi
+}
+
+# 列出当前规则
+list_rules() {
+    echo -e "${WHITE}当前规则:${NC}"
+    echo ""
+    python3 << 'PYEOF'
+import yaml
+with open("'"$CONFIG_FILE"'") as f:
+    cfg = yaml.safe_load(f) or {}
+rules = cfg.get('rules', []) or []
+for i, r in enumerate(rules, 1):
+    print(f"  {i}. {r}")
+PYEOF
+    echo ""
+}
+
+# 添加规则
+add_rule() {
+    echo -e "${WHITE}规则类型:${NC}"
+    echo "  1. DOMAIN-SUFFIX（域名后缀，如 google.com）"
+    echo "  2. DOMAIN（精确域名）"
+    echo "  3. IP-CIDR（IP段，如 10.0.0.0/8）"
+    read -p "请选择 [1-3]: " type_choice
+
+    case $type_choice in
+        1) rule_type="DOMAIN-SUFFIX" ;;
+        2) rule_type="DOMAIN" ;;
+        3) rule_type="IP-CIDR" ;;
+        *) echo -e "${RED}无效选择${NC}"; return 1 ;;
+    esac
+
+    read -p "域名/IP: " rule_value
+    if [ -z "$rule_value" ]; then
+        echo -e "${RED}不能为空${NC}"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${WHITE}目标:${NC}"
+    echo "  1. DIRECT（直连）"
+    echo "  2. 代理（走故障转移组）"
+    echo "  3. REJECT（拒绝/广告拦截）"
+    read -p "请选择 [1-3]: " target_choice
+
+    case $target_choice in
+        1) target="DIRECT" ;;
+        2) target="🔄 故障转移" ;;
+        3) target="REJECT" ;;
+        *) echo -e "${RED}无效选择${NC}"; return 1 ;;
+    esac
+
+    local rule="$rule_type,$rule_value,$target"
+
+    backup_config
+
+    python3 << PYEOF
+import yaml
+with open("$CONFIG_FILE") as f:
+    cfg = yaml.safe_load(f) or {}
+if 'rules' not in cfg or cfg['rules'] is None:
+    cfg['rules'] = []
+cfg['rules'].append("$rule")
+with open("$CONFIG_FILE", 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+PYEOF
+
+    echo ""
+    echo -e "${GREEN}✅ 已添加: $rule${NC}"
+
+    ask_restart
+}
+
+# 删除规则
+delete_rule() {
+    list_rules
+    read -p "输入要删除的规则编号: " num
+
+    if [ -z "$num" ] || ! [[ "$num" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}无效编号${NC}"
+        return 1
+    fi
+
+    backup_config
+
+    python3 << PYEOF
+import yaml
+with open("$CONFIG_FILE") as f:
+    cfg = yaml.safe_load(f) or {}
+rules = cfg.get('rules', []) or []
+idx = int("$num") - 1
+if 0 <= idx < len(rules):
+    removed = rules.pop(idx)
+    with open("$CONFIG_FILE", 'w') as f:
+        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    print(f"✅ 已删除: {removed}")
+else:
+    print("❌ 无效编号")
+PYEOF
+
+    ask_restart
+}
+
+# 从 OpenClaw 同步模型域名
+sync_from_openclaw() {
+    if [ ! -f "$OPENCLAW_CONFIG" ]; then
+        echo -e "${RED}❌ OpenClaw 配置不存在: $OPENCLAW_CONFIG${NC}"
+        return 1
+    fi
+
+    echo -e "${WHITE}从 OpenClaw 配置中检测模型域名...${NC}"
+    echo ""
+
+    python3 << 'PYEOF'
+import json, yaml
+from urllib.parse import urlparse
+
+OPENCLAW_CONFIG = "'"$OPENCLAW_CONFIG"'"
+CONFIG_FILE = "'"$CONFIG_FILE"'"
+
+# 读取 OpenClaw 配置
+with open(OPENCLAW_CONFIG) as f:
+    oc = json.load(f)
+
+providers = oc.get("models", {}).get("providers", {})
+domains = set()
+
+# 始终包含的域名
+ALWAYS = {"anthropic.com", "openai.com", "bigmodel.cn", "openrouter.ai",
+          "volces.com", "volcengine.com", "xiaomimimo.com", "dataeyes.ai"}
+
+domains.update(ALWAYS)
+
+for name, prov in providers.items():
+    url = prov.get("baseUrl", "")
+    if not url:
+        continue
+    parsed = urlparse(url)
+    host = parsed.netloc
+    parts = host.split(".")
+    root = ".".join(parts[-2:]) if len(parts) > 2 else host
+    domains.add(root)
+    print(f"  🔍 {name}: {url} → {root}")
+
+# 读取现有规则
+with open(CONFIG_FILE) as f:
+    cfg = yaml.safe_load(f) or {}
+rules = cfg.get("rules", []) or []
+existing = set()
+for r in rules:
+    parts = r.split(",")
+    if len(parts) >= 2 and parts[0] in ("DOMAIN-SUFFIX", "DOMAIN"):
+        existing.add(parts[1])
+
+# 找出新增
+to_add = sorted(domains - existing)
+to_remove = sorted(existing - domains - {"googleapis.com"})  # 保留 googleapis
+
+print(f"\n  已有: {len(existing & domains)} 个域名")
+print(f"  待添加: {len(to_add)} 个")
+for d in to_add:
+    print(f"    ➕ {d}")
+
+if not to_add:
+    print("  ℹ️  已是最新，无需更新")
+else:
+    confirm = input(f"\n是否添加这 {len(to_add)} 个域名到直连规则？ [Y/n]: ").strip()
+    if confirm.lower() in ("", "y", "yes"):
+        # 备份
+        import shutil, datetime
+        backup_dir = CONFIG_FILE.rsplit("/", 1)[0] + "/backups"
+        import os
+        os.makedirs(backup_dir, exist_ok=True)
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        shutil.copy2(CONFIG_FILE, f"{backup_dir}/config.yaml.{ts}.bak")
+
+        for d in to_add:
+            rules.insert(0, f"DOMAIN-SUFFIX,{d},DIRECT")
+        cfg["rules"] = rules
+        with open(CONFIG_FILE, "w") as f:
+            yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        print(f"\n✅ 已添加 {len(to_add)} 个域名到直连规则")
+    else:
+        print("已取消")
+PYEOF
+}
+
+# 直接编辑 rules 段
+edit_rules() {
+    ${EDITOR:-vi} "$CONFIG_FILE"
+    echo ""
+    echo -e "${WHITE}正在校验配置...${NC}"
+    if command -v mihomo-check &>/dev/null; then
+        mihomo-check
+    fi
+    ask_restart
+}
+
+# 询问是否重启
+ask_restart() {
+    echo ""
+    read -p "是否重启 mihomo 生效？ [Y/n]: " yn
+    case ${yn:-y} in
+        [Yy]*)
+            if command -v mihomo-stop &>/dev/null; then
+                mihomo-stop 2>/dev/null
+                sleep 1
+                mihomo-start
+            elif systemctl is-active --quiet mihomo.service 2>/dev/null; then
+                sudo systemctl restart mihomo.service
+                echo "✅ mihomo 已重启"
+            fi
+            ;;
+    esac
+}
+
+# 主菜单
+show_menu() {
+    echo -e "${CYAN}"
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║                     规则管理                                ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+    echo "  1. 查看规则"
+    echo "  2. 添加规则"
+    echo "  3. 删除规则"
+    echo "  4. 从 OpenClaw 同步模型域名"
+    echo "  5. 直接编辑 config.yaml"
+    echo "  0. 返回"
+    echo ""
+    read -p "请选择 [0-5]: " choice
+
+    case $choice in
+        1) list_rules ;;
+        2) add_rule ;;
+        3) delete_rule ;;
+        4) sync_from_openclaw ;;
+        5) edit_rules ;;
+        0) exit 0 ;;
+        *) echo -e "${RED}无效选择${NC}" ;;
+    esac
+}
+
+# 命令行参数
+case "${1:-}" in
+    list|ls)
+        list_rules
+        ;;
+    add)
+        add_rule
+        ;;
+    rm|delete)
+        delete_rule
+        ;;
+    sync)
+        sync_from_openclaw
+        ;;
+    edit)
+        edit_rules
+        ;;
+    *)
+        show_menu
+        ;;
+esac

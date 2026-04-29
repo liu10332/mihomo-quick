@@ -1,0 +1,73 @@
+# mihomo-quick 配置文件
+# 编辑此文件可直接修改代理规则、订阅等
+# 修改后运行 mihomo-check 校验，再 proxy-restart 生效
+
+mixed-port: 7890
+socks-port: 7891
+allow-lan: true
+bind-address: '*'
+mode: rule
+log-level: info
+external-controller: 0.0.0.0:9090
+secret: ''
+external-ui: /root/.config/mihomo/dashboard
+
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+  - '*.lan'
+  - localhost.ptlogin2.qq.com
+  default-nameserver:
+  - 223.5.5.5
+  - 119.29.29.29
+  nameserver:
+  - 223.5.5.5
+  - 119.29.29.29
+  - tls://dns.alidns.com
+  - tls://dot.pub
+
+# TUN 模式配置
+tun:
+  enable: true
+  stack: system
+  dns-hijack:
+  - any:53
+  auto-route: true
+  auto-detect-interface: true
+  device: tun0
+  mtu: 9000
+  strict-route: true
+  gateway: 10.0.0.1
+
+# GeoX 镜像源（加速下载）
+geox-url:
+  geoip: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+  geosite: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+  mmdb: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb"
+
+# 订阅配置（由 mihomo-add-sub 管理，也可手动编辑）
+proxy-providers: {}
+
+# 代理组配置（由 mihomo-add-sub 管理，也可手动编辑）
+proxy-groups: []
+
+# 规则配置（由 mihomo-rules 管理，也可手动编辑）
+rules:
+- DOMAIN-SUFFIX,anthropic.com,DIRECT
+- DOMAIN-SUFFIX,bigmodel.cn,DIRECT
+- DOMAIN-SUFFIX,dataeyes.ai,DIRECT
+- DOMAIN-SUFFIX,openai.com,DIRECT
+- DOMAIN-SUFFIX,openrouter.ai,DIRECT
+- DOMAIN-SUFFIX,volcengine.com,DIRECT
+- DOMAIN-SUFFIX,volces.com,DIRECT
+- DOMAIN-SUFFIX,xiaomimimo.com,DIRECT
+- DOMAIN-SUFFIX,googleapis.com,REJECT
+- IP-CIDR,192.168.0.0/16,DIRECT
+- IP-CIDR,10.0.0.0/8,DIRECT
+- IP-CIDR,172.16.0.0/12,DIRECT
+- IP-CIDR,127.0.0.0/8,DIRECT
+- GEOIP,CN,DIRECT
+- MATCH,REJECT

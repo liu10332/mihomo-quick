@@ -1,0 +1,31 @@
+#!/bin/bash
+# mihomo-stop - 停止 mihomo
+
+PID_FILE="$HOME/.cache/mihomo/mihomo.pid"
+
+if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE")
+    if kill -0 "$PID" 2>/dev/null; then
+        echo "🛑 停止 Mihomo (PID: $PID)..."
+        kill "$PID"
+        sleep 1
+        if kill -0 "$PID" 2>/dev/null; then
+            echo "⚠️  强制停止..."
+            kill -9 "$PID"
+        fi
+        rm -f "$PID_FILE"
+        echo "✅ Mihomo 已停止"
+    else
+        echo "⚠️  Mihomo 未在运行"
+        rm -f "$PID_FILE"
+    fi
+else
+    # 也尝试 systemd
+    if systemctl is-active --quiet mihomo.service 2>/dev/null; then
+        echo "🛑 停止 mihomo (systemd)..."
+        sudo systemctl stop mihomo.service
+        echo "✅ 已停止"
+    else
+        echo "⚠️  Mihomo 未在运行"
+    fi
+fi
