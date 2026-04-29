@@ -190,8 +190,20 @@ step_subscription_config() {
         PROVIDER_NAME=$(get_input "订阅名称" "provider-a")
         PROVIDER_URL=$(get_input "订阅URL" "")
         PROVIDER_INTERVAL=$(get_input "更新间隔(秒)" "3600" "validate_number")
-        
+
         if [[ -n "$PROVIDER_URL" ]]; then
+            # 询问是否需要代理链下载
+            echo ""
+            echo -e "${WHITE}此订阅是否需要通过代理下载？（订阅站被墙时需要）${NC}"
+            echo "  1. 直接下载（默认）"
+            echo "  2. 通过已有代理组下载"
+            local proxy_choice=$(get_input "请选择" "1")
+            if [[ "$proxy_choice" == "2" ]]; then
+                PROXY_PROVIDER=$(get_input "代理组名称（如: 🚀 节点选择）" "")
+                if [[ -n "$PROXY_PROVIDER" ]]; then
+                    log_info "将通过代理组 [$PROXY_PROVIDER] 下载订阅"
+                fi
+            fi
             log_info "订阅配置: name=$PROVIDER_NAME, url=$PROVIDER_URL, interval=$PROVIDER_INTERVAL"
         else
             log_warning "订阅URL为空，跳过订阅配置"
@@ -378,24 +390,33 @@ EOF
 }
 
 # 添加订阅配置（参照 mihomo-proxy-export 的完整代理组架构）
+# 订阅解析完全交给 mihomo 内核处理，不做本地解析
 add_subscription_config() {
+    # 创建 providers 缓存目录
+    mkdir -p "${CONFIGS_DIR}/providers"
+
+    # 询问是否需要通过代理下载（订阅站被墙的情况）
+    local proxy_line=""
+    if [[ -n "${PROXY_PROVIDER:-}" ]]; then
+        proxy_line="    proxy: \"${PROXY_PROVIDER}\""
+    fi
+
     cat >> "${CONFIGS_DIR}/config.yaml" << EOF
 
-# 订阅配置
+# 订阅配置（mihomo 内核自动下载、解析、缓存）
 proxy-providers:
   $PROVIDER_NAME:
     type: http
     url: "$PROVIDER_URL"
     interval: ${PROVIDER_INTERVAL:-3600}
-    header:
-      User-Agent:
-        - "clash-verge/v2.2.3"
+    path: ./providers/${PROVIDER_NAME}.yaml
     health-check:
       enable: true
       interval: 600
       url: http://cp.cloudflare.com/generate_204
     override:
       skip-cert-verify: true
+${proxy_line}
 
 proxy-groups:
   - name: "🚀 节点选择"

@@ -15,21 +15,26 @@ generate_proxy_providers() {
     local provider_interval=${3:-3600}
     local health_check_url=${4:-"http://cp.cloudflare.com/generate_204"}
     local health_check_interval=${5:-600}
-    
+    local proxy_chain=${6:-""}
+
+    local proxy_line=""
+    if [[ -n "$proxy_chain" ]]; then
+        proxy_line="    proxy: "$proxy_chain""
+    fi
+
     cat << EOF
   $provider_name:
     type: http
     url: "$provider_url"
     interval: $provider_interval
-    header:
-      User-Agent:
-        - "clash-verge/v2.2.3"
+    path: ./providers/$provider_name.yaml
     health-check:
       enable: true
       interval: $health_check_interval
       url: $health_check_url
     override:
       skip-cert-verify: true
+${proxy_line}
 EOF
 }
 
@@ -78,6 +83,9 @@ generate_config_with_subscription() {
     local output_file=$7
     
     log_info "生成包含订阅的配置..."
+    
+    # 创建 providers 缓存目录
+    mkdir -p "$(dirname "$output_file")/providers"
     
     # 读取模板
     local template_file="${TEMPLATES_DIR}/${mode}.yaml.template"
@@ -160,6 +168,20 @@ subscription_config_wizard() {
     # 获取更新间隔
     read -p "更新间隔(秒) [3600]: " provider_interval
     provider_interval=${provider_interval:-3600}
+    
+    # 询问是否需要代理链下载
+    echo ""
+    echo "此订阅是否需要通过代理下载？（订阅站被墙时需要）"
+    echo "  1. 直接下载（默认）"
+    echo "  2. 通过已有代理组下载"
+    read -p "请选择 [1-2]: " proxy_choice
+    local provider_proxy=""
+    if [[ "$proxy_choice" == "2" ]]; then
+        read -p "代理组名称（如: 🚀 节点选择）: " provider_proxy
+        if [[ -n "$provider_proxy" ]]; then
+            log_info "将通过代理组 [$provider_proxy] 下载订阅"
+        fi
+    fi
     
     # 获取代理模式
     echo ""

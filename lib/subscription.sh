@@ -103,27 +103,13 @@ subscription_add() {
         log_info "使用代理下载订阅"
     fi
     
-    # 下载订阅验证
-    log_info "下载订阅验证..."
-    local temp_file="/tmp/sub_${sub_name}.yaml"
-    
-    if curl -s "${curl_opts[@]}" -o "$temp_file" "$sub_url"; then
-        log_success "订阅下载成功"
-        
-        # 显示节点数量
-        local node_count=$(grep -c "^  - name:" "$temp_file" 2>/dev/null || echo "0")
-        log_info "检测到 $node_count 个节点"
-    else
-        log_error "订阅下载失败"
-        rm -f "$temp_file"
-        read -p "按 Enter 键返回..."
-        show_subscription_menu
-        return 1
-    fi
-    
+    # 订阅解析完全交给 mihomo 内核，这里只做配置写入
+    log_info "添加订阅配置（mihomo 内核将自动下载和解析）..."
+
     # 添加到配置
     local config_file="${CONFIGS_DIR}/config.yaml"
-    
+    mkdir -p "${CONFIGS_DIR}/providers"
+
     if [[ -f "$config_file" ]]; then
         # 检查是否已有proxy-providers部分
         if grep -q "proxy-providers:" "$config_file"; then
@@ -133,51 +119,45 @@ subscription_add() {
                 # 删除旧配置
                 sed -i "/  ${sub_name}:/,/^  [a-zA-Z]/d" "$config_file"
             fi
-            
-            # 在proxy-providers部分添加
+
+            # 在proxy-providers部分添加（参照 mihomo-proxy-export 格式）
             local provider_block="  ${sub_name}:
     type: http
     url: \"${sub_url}\"
     interval: ${interval}
-    header:
-      User-Agent:
-        - \"clash-verge/v2.2.3\"
+    path: ./providers/${sub_name}.yaml
     health-check:
       enable: true
       interval: 600
       url: http://cp.cloudflare.com/generate_204
     override:
       skip-cert-verify: true"
-            
+
             # 添加代理链配置
             if [[ -n "$proxy_line" ]]; then
                 provider_block="${provider_block}
 ${proxy_line}"
             fi
-            
+
             # 使用sed插入到proxy-providers:之后
             local temp_insert=$(mktemp)
             echo "$provider_block" > "$temp_insert"
             sed -i "/proxy-providers:/r $temp_insert" "$config_file"
             rm -f "$temp_insert"
-            
+
             # 将新订阅添加到所有代理组的 use 列表中
-            # 找到所有包含 "use:" 的代理组，在其后添加新订阅
             if grep -q "    use:" "$config_file"; then
-                # 检查是否已经在代理组中
                 if ! grep -A 5 "    use:" "$config_file" | grep -q "- ${sub_name}"; then
-                    # 在每个 use: 块的第一个 - 之前插入（使用 awk）
                     local temp_file2=$(mktemp)
                     awk -v name="$sub_name" '
-                    /    use:/ { 
-                        print; 
-                        getline; 
-                        # 在第一个 provider 引用之前插入新的
+                    /    use:/ {
+                        print;
+                        getline;
                         if ($0 ~ /^      - /) {
                             print "      - " name
                         }
-                        print; 
-                        next 
+                        print;
+                        next
                     }
                     { print }
                     ' "$config_file" > "$temp_file2"
@@ -185,7 +165,7 @@ ${proxy_line}"
                     log_info "已将 [$sub_name] 添加到代理组"
                 fi
             fi
-            
+
             log_success "订阅已添加到配置"
         else
             log_warning "配置文件中没有proxy-providers部分，请先运行配置向导"
@@ -193,9 +173,6 @@ ${proxy_line}"
     else
         log_error "配置文件不存在"
     fi
-    
-    # 清理临时文件
-    rm -f "$temp_file"
     
     read -p "按 Enter 键返回..."
     show_subscription_menu
@@ -256,41 +233,45 @@ subscription_list() {
     show_subscription_menu
 }
 
-# 更新订阅
+# 更新订阅（通知 mihomo 内核重新下载）
 subscription_update() {
     log_info "更新订阅..."
-    
+
     local config_file="${CONFIGS_DIR}/config.yaml"
-    
+
     if [[ -f "$config_file" ]]; then
-        # 提取订阅URL
-        local urls=$(grep -A 5 "proxy-providers:" "$config_file" | grep "url:" | sed 's/.*url: "//' | sed 's/".*//')
-        
-        if [[ -n "$urls" ]]; then
-            # 检测代理是否可用，可用则走代理
-            local curl_opts=()
-            if curl -s --connect-timeout 2 --proxy http://127.0.0.1:7890 http://cp.cloudflare.com/generate_204 > /dev/null 2>&1; then
-                curl_opts=(--proxy http://127.0.0.1:7890)
-                log_info "使用代理更新订阅"
-            else
-                log_info "代理不可用，直连更新"
-            fi
-            
-            echo ""
-            echo -e "${WHITE}更新订阅...${NC}"
-            
-            for url in $urls; do
-                log_info "更新订阅: $url"
-                if curl -s --connect-timeout 10 "${curl_opts[@]}" "$url" > /dev/null; then
-                    log_success "订阅更新成功"
-                else
-                    log_warning "订阅更新失败"
-                fi
-            done
-            
-            log_success "所有订阅更新完成"
-        else
+        # 检查是否有订阅配置
+        if ! grep -q "proxy-providers:" "$config_file"; then
             log_warning "未找到订阅配置"
+            read -p "按 Enter 键返回..."
+            show_subscription_menu
+            return 1
+        fi
+
+        # 列出当前订阅
+        echo ""
+        echo -e "${WHITE}当前订阅:${NC}"
+        sed -n '/^proxy-providers:/,/^[a-zA-Z]/p' "$config_file" | grep -E "^  [a-zA-Z]" | sed 's/://g' | sed 's/^  /  - /'
+        echo ""
+
+        # 通过 API 通知 mihomo 内核刷新订阅
+        local api_port=$(grep "^external-controller:" "$config_file" | sed 's/.*://' | tr -d ' ')
+        api_port="${api_port:-9090}"
+
+        if curl -s --connect-timeout 3 "http://127.0.0.1:${api_port}/providers" > /dev/null 2>&1; then
+            log_info "通过 mihomo API 触发订阅刷新..."
+            # mihomo 的 proxy-providers 会在 interval 到期时自动刷新
+            # 也可以通过 PUT /providers/proxies/:name 触发
+            local providers=$(sed -n '/^proxy-providers:/,/^[a-zA-Z]/p' "$config_file" | grep -E "^  [a-zA-Z]" | sed 's/://g' | sed 's/^  //')
+            for provider in $providers; do
+                curl -s -X PUT "http://127.0.0.1:${api_port}/providers/proxies/${provider}" > /dev/null 2>&1
+                log_info "已触发刷新: $provider"
+            done
+            log_success "订阅刷新请求已发送，mihomo 将在后台下载"
+        else
+            log_warning "mihomo 未运行或 API 不可达 (端口: $api_port)"
+            log_info "订阅将在 mihomo 下次启动时自动下载"
+            log_info "也可以手动重启 mihomo 来立即下载订阅"
         fi
     else
         log_error "配置文件不存在"

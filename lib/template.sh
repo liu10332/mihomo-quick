@@ -211,26 +211,34 @@ generate_config() {
 # 添加订阅配置到配置文件（参照 mihomo-proxy-export 的完整架构）
 add_subscription_to_config() {
     local config_file=$1
-    
+
     log_info "添加订阅配置..."
-    
+
+    # 创建 providers 缓存目录
+    mkdir -p "$(dirname "$config_file")/providers"
+
+    # 代理链配置（通过已有代理组下载被墙的订阅）
+    local proxy_line=""
+    if [[ -n "${PROXY_PROVIDER:-}" ]]; then
+        proxy_line="    proxy: "${PROXY_PROVIDER}""
+    fi
+
     cat >> "$config_file" << EOF
 
-# 订阅配置
+# 订阅配置（mihomo 内核自动下载、解析、缓存）
 proxy-providers:
   ${PROVIDER_NAME:-provider-a}:
     type: http
     url: "${PROVIDER_URL}"
     interval: ${PROVIDER_INTERVAL:-3600}
-    header:
-      User-Agent:
-        - "clash-verge/v2.2.3"
+    path: ./providers/${PROVIDER_NAME:-provider-a}.yaml
     health-check:
       enable: true
       interval: 600
       url: ${HEALTH_CHECK_URL:-http://cp.cloudflare.com/generate_204}
     override:
       skip-cert-verify: ${SKIP_CERT_VERIFY:-true}
+${proxy_line}
 
 # 代理组配置（url-test + fallback + select 三层架构）
 proxy-groups:
@@ -260,7 +268,7 @@ proxy-groups:
       - "🚀 节点选择"
       - DIRECT
 EOF
-    
+
     log_success "订阅配置已添加"
 }
 
