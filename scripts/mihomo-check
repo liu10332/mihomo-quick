@@ -2,7 +2,7 @@
 # mihomo-check - 校验 mihomo 配置文件
 
 CONFIG_DIR="${HOME}/.config/mihomo"
-MIHOMO_BIN=$(command -v mihomo 2>/dev/null || echo "$HOME/.local/bin/mihomo")
+MIHOMO_BIN="$HOME/.local/bin/mihomo-core"
 
 echo "🔍 校验 mihomo 配置..."
 echo "   配置目录: $CONFIG_DIR"

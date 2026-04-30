@@ -13,7 +13,7 @@ ExecStartPre=-/sbin/ip tuntap add tun0 mode tun
 ExecStartPre=-/sbin/ip addr add 10.0.0.1/24 dev tun0
 ExecStartPre=-/sbin/ip link set tun0 up
 
-ExecStart=/root/.local/bin/mihomo -d /root/.config/mihomo
+ExecStart=/root/.local/bin/mihomo-core -d /root/.config/mihomo
 ExecReload=/bin/kill -HUP $MAINPID
 
 # 停止后清理 TUN 设备

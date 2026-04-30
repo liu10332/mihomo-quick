@@ -34,7 +34,7 @@ echo "   端口: 7890 (HTTP) / 7891 (SOCKS5)"
 echo "   面板: http://127.0.0.1:9090/ui"
 
 # 启动
-nohup ~/.local/bin/mihomo -d "$CONFIG_DIR" > "$LOG_FILE" 2>&1 &
+nohup ~/.local/bin/mihomo-core -d "$CONFIG_DIR" > "$LOG_FILE" 2>&1 &
 MIHOMO_PID=$!
 echo $MIHOMO_PID > "$PID_FILE"
 
