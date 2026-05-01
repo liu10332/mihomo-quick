@@ -1,0 +1,91 @@
+#!/bin/bash
+# mihomo-rollback - 配置备份与回滚
+
+CONFIG_DIR="${HOME}/.config/mihomo"
+CONFIG_FILE="$CONFIG_DIR/config.yaml"
+BACKUP_DIR="$CONFIG_DIR/backups"
+MAX_BACKUPS=10
+
+mkdir -p "$BACKUP_DIR"
+
+# 备份当前配置
+backup_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        return 1
+    fi
+    local backup_name="config.yaml.$(date +%Y%m%d_%H%M%S).bak"
+    cp "$CONFIG_FILE" "$BACKUP_DIR/$backup_name"
+    # 清理旧备份
+    ls -t "$BACKUP_DIR"/config.yaml.*.bak 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)) | xargs rm -f 2>/dev/null
+    echo "$BACKUP_DIR/$backup_name"
+}
+
+# 列出备份
+list_backups() {
+    echo ""
+    echo "可用的备份:"
+    echo ""
+    local idx=1
+    for f in $(ls -t "$BACKUP_DIR"/config.yaml.*.bak 2>/dev/null | head -10); do
+        local ts=$(basename "$f" | sed 's/config.yaml.\(.*\).bak/\1/')
+        local size=$(du -h "$f" | cut -f1)
+        echo "  $idx. $ts ($size)"
+        ((idx++))
+    done
+    echo ""
+}
+
+# 回滚
+restore_backup() {
+    local choice=$1
+    local idx=1
+    for f in $(ls -t "$BACKUP_DIR"/config.yaml.*.bak 2>/dev/null | head -10); do
+        if [ "$idx" = "$choice" ]; then
+            # 备份当前配置
+            backup_config > /dev/null
+            cp "$f" "$CONFIG_FILE"
+            echo "✅ 已恢复到: $(basename "$f")"
+            echo ""
+            read -p "是否重启 mihomo 生效？ [Y/n]: " yn
+            case ${yn:-y} in
+                [Yy]*)
+                    if command -v mihomo-stop &>/dev/null; then
+                        mihomo-stop
+                        sleep 1
+                        mihomo-start
+                    elif systemctl is-active --quiet mihomo.service 2>/dev/null; then
+                        sudo systemctl restart mihomo.service
+                        echo "✅ mihomo 已重启"
+                    else
+                        echo "⚠️  请手动重启: proxy-restart"
+                    fi
+                    ;;
+            esac
+            return 0
+        fi
+        ((idx++))
+    done
+    echo "❌ 无效选择"
+    return 1
+}
+
+# 主逻辑
+case "${1:-}" in
+    list|ls)
+        list_backups
+        ;;
+    "")
+        list_backups
+        if [ "$(ls -t "$BACKUP_DIR"/config.yaml.*.bak 2>/dev/null | head -1)" = "" ]; then
+            echo "没有可用的备份"
+            exit 0
+        fi
+        read -p "选择要恢复的版本 (0=取消): " choice
+        if [ "$choice" != "0" ] && [ -n "$choice" ]; then
+            restore_backup "$choice"
+        fi
+        ;;
+    *)
+        restore_backup "$1"
+        ;;
+esac
