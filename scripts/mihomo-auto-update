@@ -1,0 +1,135 @@
+#!/bin/bash
+# mihomo-auto-update - 自动更新 GeoIP 和 GeoSite 数据库
+# 用法:
+#   mihomo-auto-update          # 完整更新（交互式）
+#   mihomo-auto-update --silent # 静默模式（用于 systemd 启动前）
+#   mihomo-auto-update --force  # 强制更新（忽略时间检查）
+
+set -e
+
+CONFIG_DIR="${HOME}/.config/mihomo"
+LOG_FILE="${HOME}/.cache/mihomo/auto-update.log"
+STAMP_FILE="${HOME}/.cache/mihomo/last-update.stamp"
+MIRRORS=("https://ghfast.top" "https://gh-proxy.com" "")
+
+# 默认 7 天更新一次
+UPDATE_INTERVAL=$((7 * 24 * 3600))
+
+# 解析参数
+SILENT=false
+FORCE=false
+for arg in "$@"; do
+    case $arg in
+        --silent) SILENT=true ;;
+        --force) FORCE=true ;;
+    esac
+done
+
+mkdir -p "$(dirname "$LOG_FILE")"
+
+log() {
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "$msg" >> "$LOG_FILE"
+    [ "$SILENT" = false ] && echo "$1"
+}
+
+# 检查是否需要更新
+check_interval() {
+    if [ "$FORCE" = true ]; then
+        return 0  # 强制更新
+    fi
+    
+    if [ ! -f "$STAMP_FILE" ]; then
+        return 0  # 从未更新过
+    fi
+    
+    local last_update=$(cat "$STAMP_FILE" 2>/dev/null || echo 0)
+    local now=$(date +%s)
+    local diff=$((now - last_update))
+    
+    if [ "$diff" -lt "$UPDATE_INTERVAL" ]; then
+        local days_left=$(( (UPDATE_INTERVAL - diff) / 86400 ))
+        log "⏭️ 跳过更新：距上次更新不足 7 天（还剩 ${days_left} 天）"
+        return 1  # 不需要更新
+    fi
+    
+    return 0
+}
+
+download_with_mirrors() {
+    local url="$1"
+    local output="$2"
+    local desc="$3"
+
+    for mirror in "${MIRRORS[@]}"; do
+        local full="${mirror:+$mirror/}$url"
+        if curl -sL --connect-timeout 10 --max-time 120 -o "$output" "$full" && [ -s "$output" ]; then
+            return 0
+        fi
+    done
+    log "❌ $desc 下载失败"
+    return 1
+}
+
+# 更新 GeoIP
+update_geoip() {
+    local geoip_file="$CONFIG_DIR/geoip.metadb"
+    local url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.metadb"
+    local temp="/tmp/geoip-auto-update.metadb"
+
+    log "📥 更新 GeoIP..."
+
+    if ! download_with_mirrors "$url" "$temp" "GeoIP"; then
+        # 尝试完整版
+        url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.metadb"
+        if ! download_with_mirrors "$url" "$temp" "GeoIP (full)"; then
+            return 1
+        fi
+    fi
+
+    if [ -f "$geoip_file" ]; then
+        cp "$geoip_file" "${geoip_file}.bak"
+    fi
+
+    mv "$temp" "$geoip_file"
+    local new_size=$(du -h "$geoip_file" | cut -f1)
+    log "✅ GeoIP 已更新 ($new_size)"
+}
+
+# 更新 GeoSite
+update_geosite() {
+    local geosite_file="$CONFIG_DIR/geosite.dat"
+    local url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+    local temp="/tmp/geosite-auto-update.dat"
+
+    log "📥 更新 GeoSite..."
+
+    if ! download_with_mirrors "$url" "$temp" "GeoSite"; then
+        return 1
+    fi
+
+    if [ -f "$geosite_file" ]; then
+        cp "$geosite_file" "${geosite_file}.bak"
+    fi
+
+    mv "$temp" "$geosite_file"
+    local new_size=$(du -h "$geosite_file" | cut -f1)
+    log "✅ GeoSite 已更新 ($new_size)"
+}
+
+# 主流程
+log "========== 检查 GeoIP/GeoSite 更新 =========="
+
+# 检查是否需要更新
+if ! check_interval; then
+    exit 0
+fi
+
+# 执行更新
+update_geoip || true
+update_geosite || true
+
+# 更新时间戳
+date +%s > "$STAMP_FILE"
+
+log "========== 更新检查完成 =========="

@@ -214,6 +214,42 @@ update_geoip() {
     echo -e "${GREEN}   ✅ GeoIP 已更新 ($new_size)${NC}"
 }
 
+# ===== 更新 GeoSite 数据库 =====
+
+update_geosite() {
+    echo ""
+    echo -e "${CYAN}━━━ 🌐 GeoSite 数据库 ━━━${NC}"
+
+    local geosite_file="$CONFIG_DIR/geosite.dat"
+
+    if [ -f "$geosite_file" ]; then
+        local size=$(du -h "$geosite_file" | cut -f1)
+        local mod=$(date -r "$geosite_file" '+%Y-%m-%d %H:%M')
+        echo "   当前文件: $size (更新于 $mod)"
+    else
+        echo -e "   当前状态: ${YELLOW}未安装${NC}"
+    fi
+
+    read -p "   是否更新 GeoSite？ [Y/n]: " yn || true
+    [[ "$yn" =~ ^[Nn]$ ]] && return 0
+
+    local url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+    local temp="/tmp/geosite-update.dat"
+
+    echo "   📥 下载中..."
+    if ! download_with_mirrors "$url" "$temp" "GeoSite"; then
+        return 1
+    fi
+
+    if [ -f "$geosite_file" ]; then
+        cp "$geosite_file" "${geosite_file}.bak"
+    fi
+
+    mv "$temp" "$geosite_file"
+    local new_size=$(du -h "$geosite_file" | cut -f1)
+    echo -e "${GREEN}   ✅ GeoSite 已更新 ($new_size)${NC}"
+}
+
 # ===== 主流程 =====
 
 echo -e "${WHITE}"
@@ -222,22 +258,25 @@ echo "║                  mihomo-update 更新工具                     ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
-# 支持单独更新: mihomo-update core / dashboard / geoip
+# 支持单独更新: mihomo-update core / dashboard / geoip / geosite
 case "${1:-all}" in
     core)      update_core ;;
     dashboard) update_dashboard ;;
     geoip)     update_geoip ;;
+    geosite)   update_geosite ;;
     all)
         update_core
         update_dashboard
         update_geoip
+        update_geosite
         ;;
     *)
-        echo "用法: $0 [core|dashboard|geoip|all]"
+        echo "用法: $0 [core|dashboard|geoip|geosite|all]"
         echo ""
         echo "  core       仅更新 mihomo 内核"
         echo "  dashboard  仅更新 Dashboard 面板"
         echo "  geoip      仅更新 GeoIP 数据库"
+        echo "  geosite    仅更新 GeoSite 数据库"
         echo "  all        全部检查更新 (默认)"
         exit 1
         ;;

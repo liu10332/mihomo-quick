@@ -303,6 +303,11 @@ install_config() {
     if [ -f "$SCRIPT_DIR/config/geoip.metadb" ] && [ ! -f "$CONFIG_DIR/geoip.metadb" ]; then
         cp "$SCRIPT_DIR/config/geoip.metadb" "$CONFIG_DIR/geoip.metadb"
     fi
+
+    # 复制 geosite 数据
+    if [ -f "$SCRIPT_DIR/config/geosite.dat" ] && [ ! -f "$CONFIG_DIR/geosite.dat" ]; then
+        cp "$SCRIPT_DIR/config/geosite.dat" "$CONFIG_DIR/geosite.dat"
+    fi
 }
 
 # ===== 5. 创建 systemd 服务 =====
@@ -338,6 +343,12 @@ install_service() {
     echo ""
     echo -e "${WHITE}TUN 模式 (mihomo-tun.service):${NC}"
     install_one_service "mihomo-tun"
+    echo ""
+    
+    # 复制 auto-update 脚本
+    cp "$SCRIPT_DIR/scripts/mihomo-auto-update" "$HOME/.local/bin/mihomo-auto-update"
+    chmod +x "$HOME/.local/bin/mihomo-auto-update"
+    
     echo ""
     echo -e "   💡 运行 ${CYAN}mihomo${NC} 打开管理菜单，选择 '安装/更新服务' 设置开机自启"
 }

@@ -9,6 +9,7 @@ User=root
 Group=root
 Environment=HOME=/root
 ExecStartPre=/bin/mkdir -p /root/.cache/mihomo
+ExecStartPre=-/home/liu/.local/bin/mihomo-auto-update
 ExecStart=/root/.local/bin/mihomo-core -d /root/.config/mihomo
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
