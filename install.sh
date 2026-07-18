@@ -14,7 +14,7 @@ source "$SCRIPT_DIR/lib/service.sh"
 
 # ===== 常量 =====
 
-DEFAULT_INSTALL_DIR="$HOME/.mihomo-quick"
+DEFAULT_INSTALL_DIR="$HOME/.local/bin"
 DEFAULT_CONFIG_DIR="$HOME/.config/mihomo"
 
 INSTALL_DIR="${1:-$DEFAULT_INSTALL_DIR}"
