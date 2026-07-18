@@ -100,13 +100,13 @@ select_provider() {
 
 # 选择代理链（从可用代理组中选择）
 select_proxy_chain() {
-    echo ""
-    echo -e "${WHITE}━━━ 下载方式 ━━━${NC}"
-    echo -e "  此订阅是否需要通过代理下载？（订阅站被墙时需要）"
-    echo ""
-    echo "    1. 直接下载（推荐）"
-    echo "    2. 通过已有代理组下载"
-    echo ""
+    echo "" >&2
+    echo -e "${WHITE}━━━ 下载方式 ━━━${NC}" >&2
+    echo -e "  此订阅是否需要通过代理下载？（订阅站被墙时需要）" >&2
+    echo "" >&2
+    echo "    1. 直接下载（推荐）" >&2
+    echo "    2. 通过已有代理组下载" >&2
+    echo "" >&2
     read -p "  请选择 [1]: " proxy_choice
 
     if [[ "$proxy_choice" != "2" ]]; then
@@ -122,14 +122,14 @@ select_proxy_chain() {
         return
     fi
 
-    echo ""
-    echo -e "${WHITE}可用代理组:${NC}"
+    echo "" >&2
+    echo -e "${WHITE}可用代理组:${NC}" >&2
     local arr=($groups)
     for i in "${!arr[@]}"; do
-        echo "  $((i+1)). ${arr[$i]}"
+        echo "  $((i+1)). ${arr[$i]}" >&2
     done
 
-    echo ""
+    echo "" >&2
     read -p "选择代理组 [1-${#arr[@]}]: " idx
 
     if [[ "$idx" =~ ^[0-9]+$ ]] && [[ $idx -ge 1 ]] && [[ $idx -le ${#arr[@]} ]]; then
