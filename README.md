@@ -1,6 +1,6 @@
-# mihomo-quick
+# mihomo-quick - 通用部署工具
 
-轻量级 mihomo (Clash.Meta) 快速部署工具。
+轻量级 mihomo (Clash.Meta) 通用 Linux 快速部署工具，支持主流发行版和多种架构。
 
 ## 特性
 
@@ -8,6 +8,7 @@
 - ✅ **智能分流**：内置 `GEOSITE,cn,DIRECT` 规则，精准识别国内流量
 - ✅ **自动更新**：每次启动 mihomo 时自动检查并更新 GeoIP/GeoSite（7 天一次）
 - ✅ **一键部署**：自动下载 mihomo、安装面板、配置服务
+- ✅ **通用支持**：支持 Ubuntu 18+、CentOS 7+、Arch Linux 等主流发行版
 
 ## 安装
 
@@ -163,6 +164,28 @@ rules:
 ```bash
 mihomo-uninstall
 ```
+
+## 系统要求
+
+- **操作系统**: Linux (Ubuntu 18+, CentOS 7+, Arch Linux)
+- **架构**: x86_64 / aarch64 / armv7
+- **依赖**: curl, python3, tar, gzip
+
+## 自动检测
+
+安装脚本会自动检测以下内容：
+
+- **架构**: 自动检测 CPU 架构并选择对应的 mihomo 二进制
+- **发行版**: 自动检测 Linux 发行版并安装相应依赖
+- **TUN 设备**: 检测 TUN 设备可用性以支持透明代理模式
+- **可用端口**: 自动检测并分配可用的 HTTP/SOCKS5 端口
+- **防火墙配置**: 自动配置防火墙规则以允许代理流量
+
+## 安全特性
+
+- **API 绑定**: 默认仅绑定到 127.0.0.1，确保安全访问
+- **随机密钥**: 自动生成随机 API 密钥，防止未授权访问
+- **非 root 支持**: 支持以普通用户身份运行，无需 root 权限
 
 ## 自动更新机制
 
