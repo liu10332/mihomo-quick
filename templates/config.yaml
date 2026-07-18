@@ -7,7 +7,7 @@ allow-lan: true
 bind-address: '*'
 mode: rule
 log-level: info
-external-controller: 0.0.0.0:{API_PORT}
+external-controller: 127.0.0.1:{API_PORT}
 secret: '{API_SECRET}'
 external-ui: {CONFIG_DIR}/dashboard
 
@@ -50,7 +50,14 @@ geox-url:
 # 订阅配置（由 mihomo-add-sub 管理，也可手动编辑）
 proxy-providers: {}
 
-# 代理组配置（由 mihomo-add-sub 管理，也可手动编辑）
+# 默认代理组（由 mihomo-sub 动态生成）
+# 实际结构示例:
+# - name: 📡 主订阅
+#   type: url-test
+#   use: [primary-sub]
+# - name: 🔄 故障转移
+#   type: fallback
+#   proxies: [📡 主订阅, DIRECT]
 proxy-groups: []
 
 # 规则配置（由 mihomo-rules 管理，也可手动编辑）

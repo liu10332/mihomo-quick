@@ -74,6 +74,28 @@ mihomo
    0) 退出
 ```
 
+## 订阅管理
+
+使用 `mihomo-sub` 命令管理订阅：
+
+```bash
+mihomo-sub              # 交互式菜单
+mihomo-sub add          # 添加订阅
+mihomo-sub update       # 更新订阅
+mihomo-sub remove       # 删除订阅
+mihomo-sub list         # 列出订阅
+mihomo-sub refresh      # 刷新所有订阅
+```
+
+### 节点过滤
+
+系统会自动过滤以下类型的无效节点：
+- 官网信息
+- 剩余流量/套餐到期
+- Telegram 群组/频道
+
+**注意**：临时失效的真实节点不会被删除。
+
 ## 命令速查
 
 除管理菜单外，所有功能也可通过独立命令使用：
