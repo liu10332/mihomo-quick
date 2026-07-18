@@ -114,7 +114,9 @@ select_proxy_chain() {
         return
     fi
 
-    local groups=$(get_available_groups)
+    # 使用换行符分隔的列表，避免空格分割问题
+    local groups
+    groups=$(get_available_groups)
 
     if [[ -z "$groups" ]]; then
         log_warn "没有可用的代理组，将使用直连"
@@ -124,7 +126,13 @@ select_proxy_chain() {
 
     echo "" >&2
     echo -e "${WHITE}可用代理组:${NC}" >&2
-    local arr=($groups)
+
+    # 将换行符分隔的列表转换为数组
+    local arr=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && arr+=("$line")
+    done <<< "$groups"
+
     for i in "${!arr[@]}"; do
         echo "  $((i+1)). ${arr[$i]}" >&2
     done
