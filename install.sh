@@ -219,6 +219,7 @@ install_scripts() {
         scripts/mihomo-rollback   mihomo-rollback
         scripts/mihomo-logs       mihomo-logs
         scripts/mihomo-add-sub    mihomo-add-sub
+        scripts/mihomo-sub         mihomo-sub
         scripts/mihomo-rules      mihomo-rules
         scripts/set-proxy-env     set-proxy-env
         scripts/proxy-env         proxy-env
@@ -254,6 +255,9 @@ install_scripts() {
             chmod +x "$HOME/.local/bin/$name"
         fi
     done
+
+    # Create compatibility symlink
+    ln -sf mihomo-sub "$DEFAULT_INSTALL_DIR/mihomo-add-sub"
 
     # 卸载脚本
     if [[ -f "$SCRIPT_DIR/scripts/uninstall.sh" ]]; then
