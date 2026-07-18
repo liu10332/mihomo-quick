@@ -210,6 +210,12 @@ install_dashboard() {
 install_scripts() {
     log_title "安装管理脚本"
     mkdir -p "$HOME/.local/bin"
+    mkdir -p "$HOME/.mihomo-quick/lib"
+
+    # 复制 lib 库文件
+    log_step "复制库文件"
+    cp "$SCRIPT_DIR/lib/"*.sh "$HOME/.mihomo-quick/lib/"
+    log_info "库文件已复制到 ~/.mihomo-quick/lib/"
 
     local scripts=(
         scripts/mihomo-menu       mihomo

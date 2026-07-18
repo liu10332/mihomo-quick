@@ -5,10 +5,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/../lib/common.sh"
-source "$SCRIPT_DIR/../lib/detect.sh"
-source "$SCRIPT_DIR/../lib/service.sh"
-source "$SCRIPT_DIR/../lib/filter.sh"
+source "$HOME/.mihomo-quick/lib/common.sh"
+source "$HOME/.mihomo-quick/lib/detect.sh"
+source "$HOME/.mihomo-quick/lib/service.sh"
+source "$HOME/.mihomo-quick/lib/filter.sh"
 
 CONFIG_DIR="${HOME}/.config/mihomo"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"

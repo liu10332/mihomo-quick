@@ -2,9 +2,9 @@
 # mihomo-rules - 查看和管理代理规则
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-source "$SCRIPT_DIR/../lib/common.sh"
-source "$SCRIPT_DIR/../lib/detect.sh"
-source "$SCRIPT_DIR/../lib/service.sh"
+source "$HOME/.mihomo-quick/lib/common.sh"
+source "$HOME/.mihomo-quick/lib/detect.sh"
+source "$HOME/.mihomo-quick/lib/service.sh"
 
 # 同步配置文件路径（可通过环境变量覆盖）
 SYNC_CONFIG="${OPENCLAW_CONFIG:-$HOME/.openclaw/openclaw.json}"

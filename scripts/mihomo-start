@@ -2,9 +2,9 @@
 # mihomo-start - 启动 mihomo 并配置环境
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-source "$SCRIPT_DIR/../lib/common.sh"
-source "$SCRIPT_DIR/../lib/detect.sh"
-source "$SCRIPT_DIR/../lib/service.sh"
+source "$HOME/.mihomo-quick/lib/common.sh"
+source "$HOME/.mihomo-quick/lib/detect.sh"
+source "$HOME/.mihomo-quick/lib/service.sh"
 
 # 检查是否已运行
 if [[ -f "$PID_FILE" ]]; then

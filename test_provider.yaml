@@ -1,0 +1,21 @@
+proxies:
+- name: 香港 IPLC 01
+  type: ss
+  server: 6.6.6.6
+  port: 443
+  cipher: aes-256-gcm
+  password: test123
+- name: 日本 BGP 02
+  type: vmess
+  server: 7.7.7.7
+  port: 443
+- name: 美国 CN2 03
+  type: trojan
+  server: 8.8.8.8
+  port: 443
+- name: 韩国 BGP 04
+  type: ss
+  server: 11.11.11.11
+  port: 443
+  cipher: chacha20-ietf-poly1305
+  password: test456
