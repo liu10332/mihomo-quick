@@ -147,7 +147,8 @@ install_dashboard() {
     local dash_dir="$CONFIG_DIR/dashboard"
     mkdir -p "$dash_dir"
 
-    local latest=$(get_latest_release "MetaCubeX/metacubexd")
+    local latest=""
+    latest=$(get_latest_release "MetaCubeX/metacubexd" 2>/dev/null) || true
 
     if [[ -f "$dash_dir/index.html" ]]; then
         log_info "MetaCubeXD 面板已安装"
@@ -164,16 +165,12 @@ install_dashboard() {
         fi
     fi
 
-    if [[ -z "$latest" ]]; then
-        latest=$(get_latest_release "MetaCubeX/metacubexd")
-    fi
-
     if [[ -n "$latest" ]]; then
         echo "下载 MetaCubeXD $latest..."
         local url="https://github.com/MetaCubeX/metacubexd/releases/download/$latest/compressed-dist.tgz"
         local temp="/tmp/metacubexd.tgz"
 
-        if download_with_mirrors "$url" "$temp" "Dashboard"; then
+        if download_with_mirrors "$url" "$temp" "Dashboard" 2>/dev/null; then
             if tar -xzf "$temp" -C "$dash_dir" 2>/dev/null; then
                 rm -f "$temp"
                 log_info "MetaCubeXD 已安装"
@@ -470,17 +467,17 @@ main() {
     fi
 
     echo ""
-    install_mihomo
+    install_mihomo || true
     echo ""
-    install_dashboard
+    install_dashboard || true
     echo ""
-    install_scripts
+    install_scripts || true
     echo ""
-    install_config
+    install_config || true
     echo ""
-    install_services
+    install_services || true
     echo ""
-    setup_env
+    setup_env || true
 
     echo ""
     echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
