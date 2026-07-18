@@ -8,8 +8,8 @@
 _FILTER_SH_LOADED=1
 
 # 引入公共函数
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/common.sh"
+_FILTER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${_FILTER_LIB_DIR}/common.sh"
 
 # ===== 无效节点模式 =====
 # 官网信息

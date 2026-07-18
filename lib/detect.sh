@@ -6,8 +6,8 @@
 _DETECT_SH_LOADED=1
 
 # 引入公共函数
-SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
-source "$SCRIPT_DIR/common.sh"
+_DETECT_LIB_DIR="${BASH_SOURCE[0]%/*}"
+source "$_DETECT_LIB_DIR/common.sh"
 
 # ===== 架构检测 =====
 
