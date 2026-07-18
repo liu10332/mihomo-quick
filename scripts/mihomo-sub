@@ -147,6 +147,33 @@ filter_provider_nodes() {
         return 0
     fi
 
+    # 如果订阅文件包含完整配置，只提取 proxies 部分
+    if grep -q "^mixed-port:\|^dns:\|^rules:" "$provider_file" 2>/dev/null; then
+        echo "  提取代理节点列表..."
+        export MIHOMO_PROVIDER_FILE="$provider_file"
+        python3 << 'PYEOF' 2>/dev/null
+import yaml
+import os
+
+provider_file = os.environ.get('MIHOMO_PROVIDER_FILE', '')
+try:
+    with open(provider_file) as f:
+        data = yaml.safe_load(f)
+
+    if data and 'proxies' in data:
+        proxies = data['proxies']
+        # 只保留 proxies 部分
+        output = {'proxies': proxies}
+        with open(provider_file, 'w') as f:
+            yaml.dump(output, f, allow_unicode=True, default_flow_style=False)
+        print(f"  已提取 {len(proxies)} 个代理节点")
+    else:
+        print("  未找到 proxies 部分")
+except Exception as e:
+    print(f"  提取失败: {e}")
+PYEOF
+    fi
+
     echo "  过滤无效节点..."
     filter_invalid_nodes "$provider_file"
 }

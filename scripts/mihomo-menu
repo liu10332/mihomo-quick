@@ -181,10 +181,12 @@ while true; do
             fi
             ;;
         15)
-            if [[ -x "$SCRIPT_DIR/uninstall.sh" ]]; then
+            if [[ -x "$HOME/.local/bin/mihomo-uninstall" ]]; then
+                bash "$HOME/.local/bin/mihomo-uninstall"
+            elif [[ -x "$SCRIPT_DIR/uninstall.sh" ]]; then
                 bash "$SCRIPT_DIR/uninstall.sh"
             else
-                log_error "uninstall.sh 脚本未找到"
+                log_error "uninstall 脚本未找到"
             fi
             ;;
         0|q|Q)

@@ -6,6 +6,10 @@ source "$HOME/.mihomo-quick/lib/common.sh"
 source "$HOME/.mihomo-quick/lib/detect.sh"
 source "$HOME/.mihomo-quick/lib/service.sh"
 
+# 配置文件路径
+CONFIG_DIR="${HOME}/.config/mihomo"
+CONFIG_FILE="${CONFIG_DIR}/config.yaml"
+
 # 同步配置文件路径（可通过环境变量覆盖）
 SYNC_CONFIG="${OPENCLAW_CONFIG:-$HOME/.openclaw/openclaw.json}"
 
@@ -24,9 +28,12 @@ backup_config() {
 list_rules() {
     echo -e "${WHITE}当前规则:${NC}"
     echo ""
+    export MIHOMO_CONFIG="$CONFIG_FILE"
     python3 << 'PYEOF'
 import yaml
-with open("'"$CONFIG_FILE"'") as f:
+import os
+config_file = os.environ.get('MIHOMO_CONFIG', '')
+with open(config_file) as f:
     cfg = yaml.safe_load(f) or {}
 rules = cfg.get('rules', []) or []
 for i, r in enumerate(rules, 1):
@@ -74,14 +81,19 @@ add_rule() {
 
     backup_config
 
-    python3 << PYEOF || { log_error "Python 处理失败"; return 1; }
+    export MIHOMO_CONFIG="$CONFIG_FILE"
+    export MIHOMO_RULE="$rule"
+    python3 << 'PYEOF' || { log_error "Python 处理失败"; return 1; }
 import yaml
-with open("$CONFIG_FILE") as f:
+import os
+config_file = os.environ.get('MIHOMO_CONFIG', '')
+rule = os.environ.get('MIHOMO_RULE', '')
+with open(config_file) as f:
     cfg = yaml.safe_load(f) or {}
 if 'rules' not in cfg or cfg['rules'] is None:
     cfg['rules'] = []
-cfg['rules'].append("$rule")
-with open("$CONFIG_FILE", 'w') as f:
+cfg['rules'].append(rule)
+with open(config_file, 'w') as f:
     yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 PYEOF
 
@@ -103,15 +115,20 @@ delete_rule() {
 
     backup_config
 
-    python3 << PYEOF || { log_error "Python 处理失败"; return 1; }
+    export MIHOMO_CONFIG="$CONFIG_FILE"
+    export MIHOMO_NUM="$num"
+    python3 << 'PYEOF' || { log_error "Python 处理失败"; return 1; }
 import yaml
-with open("$CONFIG_FILE") as f:
+import os
+config_file = os.environ.get('MIHOMO_CONFIG', '')
+num = int(os.environ.get('MIHOMO_NUM', '0'))
+with open(config_file) as f:
     cfg = yaml.safe_load(f) or {}
 rules = cfg.get('rules', []) or []
-idx = int("$num") - 1
+idx = num - 1
 if 0 <= idx < len(rules):
     removed = rules.pop(idx)
-    with open("$CONFIG_FILE", 'w') as f:
+    with open(config_file, 'w') as f:
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
     print(f"✅ 已删除: {removed}")
 else:
@@ -132,12 +149,14 @@ sync_from_config() {
     echo -e "${WHITE}从配置中检测模型域名...${NC}"
     echo ""
 
+    export MIHOMO_SYNC_CONFIG="$SYNC_CONFIG"
+    export MIHOMO_CONFIG="$CONFIG_FILE"
     python3 << 'PYEOF' || { log_error "Python 处理失败"; return 1; }
 import json, yaml, os
 from urllib.parse import urlparse
 
-SYNC_CONFIG = os.environ.get("SYNC_CONFIG", "'"$SYNC_CONFIG"'")
-CONFIG_FILE = "'"$CONFIG_FILE"'"
+SYNC_CONFIG = os.environ.get("MIHOMO_SYNC_CONFIG", "")
+CONFIG_FILE = os.environ.get("MIHOMO_CONFIG", "")
 
 # 读取同步配置
 with open(SYNC_CONFIG) as f:
