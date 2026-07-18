@@ -18,37 +18,46 @@ CONFIG_FILE="$CONFIG_DIR/config.yaml"
 # 列出所有订阅
 get_providers() {
     if [[ -f "$CONFIG_FILE" ]]; then
-        python3 -c "
-import yaml, sys
-with open('$CONFIG_FILE') as f:
+        export MIHOMO_CONFIG="$CONFIG_FILE"
+        python3 << 'PYEOF' 2>/dev/null
+import yaml
+import os
+config_file = os.environ.get('MIHOMO_CONFIG', '')
+with open(config_file) as f:
     cfg = yaml.safe_load(f) or {}
 providers = cfg.get('proxy-providers', {}) or {}
 for name in providers:
     print(name)
-" 2>/dev/null
+PYEOF
     fi
 }
 
 # 列出所有代理组
 get_all_groups() {
     if [[ -f "$CONFIG_FILE" ]]; then
-        python3 -c "
-import yaml, sys
-with open('$CONFIG_FILE') as f:
+        export MIHOMO_CONFIG="$CONFIG_FILE"
+        python3 << 'PYEOF' 2>/dev/null
+import yaml
+import os
+config_file = os.environ.get('MIHOMO_CONFIG', '')
+with open(config_file) as f:
     cfg = yaml.safe_load(f) or {}
 groups = cfg.get('proxy-groups', []) or []
 for g in groups:
     print(g.get('name', ''))
-" 2>/dev/null
+PYEOF
     fi
 }
 
 # 获取可用代理组（url-test 和 fallback 类型，排除手动选择组）
 get_available_groups() {
-    python3 -c "
-import yaml, sys
+    export MIHOMO_CONFIG="$CONFIG_FILE"
+    python3 << 'PYEOF' 2>/dev/null
+import yaml
+import os
 
-with open('$CONFIG_FILE') as f:
+config_file = os.environ.get('MIHOMO_CONFIG', '')
+with open(config_file) as f:
     cfg = yaml.safe_load(f) or {}
 
 groups = cfg.get('proxy-groups', [])
@@ -58,7 +67,7 @@ for g in groups:
     if gtype in ('url-test', 'fallback', 'load-balance'):
         if '手动' not in name and 'select' not in name.lower():
             print(name)
-" 2>/dev/null
+PYEOF
 }
 
 # 从列表中选择一个订阅
@@ -71,15 +80,15 @@ select_provider() {
         return 1
     fi
 
-    echo ""
-    echo -e "${WHITE}可${action}的订阅:${NC}"
+    echo "" >&2
+    echo -e "${WHITE}可${action}的订阅:${NC}" >&2
     local arr=($providers)
     for i in "${!arr[@]}"; do
-        echo "  $((i+1)). ${arr[$i]}"
+        echo "  $((i+1)). ${arr[$i]}" >&2
     done
 
-    echo ""
-    read -p "选择 [1-${#arr[@]}]: " idx
+    echo "" >&2
+    read -p "  选择 [1-${#arr[@]}]: " idx
 
     if [[ "$idx" =~ ^[0-9]+$ ]] && [[ $idx -ge 1 ]] && [[ $idx -le ${#arr[@]} ]]; then
         echo "${arr[$((idx-1))]}"
@@ -371,13 +380,19 @@ update_provider() {
 
     backup_file "$CONFIG_FILE" 2>/dev/null || true
 
-    python3 << PYEOF || { log_error "Python 处理失败"; return 1; }
-import yaml
+    export MIHOMO_CONFIG="$CONFIG_FILE"
+    export MIHOMO_NAME="$name"
+    export MIHOMO_NEW_URL="$new_url"
+    export MIHOMO_NEW_INTERVAL="$new_interval"
 
-config_file = "$CONFIG_FILE"
-name = "$name"
-new_url = "$new_url"
-new_interval = "$new_interval"
+    python3 << 'PYEOF' || { log_error "Python 处理失败"; return 1; }
+import yaml
+import os
+
+config_file = os.environ.get('MIHOMO_CONFIG', '')
+name = os.environ.get('MIHOMO_NAME', '')
+new_url = os.environ.get('MIHOMO_NEW_URL', '')
+new_interval = os.environ.get('MIHOMO_NEW_INTERVAL', '')
 
 with open(config_file) as f:
     cfg = yaml.safe_load(f) or {}
@@ -409,11 +424,15 @@ remove_provider() {
 
     backup_file "$CONFIG_FILE" 2>/dev/null || true
 
-    python3 << PYEOF || { log_error "Python 处理失败"; return 1; }
-import yaml
+    export MIHOMO_CONFIG="$CONFIG_FILE"
+    export MIHOMO_NAME="$name"
 
-config_file = "$CONFIG_FILE"
-name = "$name"
+    python3 << 'PYEOF' || { log_error "Python 处理失败"; return 1; }
+import yaml
+import os
+
+config_file = os.environ.get('MIHOMO_CONFIG', '')
+name = os.environ.get('MIHOMO_NAME', '')
 
 with open(config_file) as f:
     cfg = yaml.safe_load(f) or {}
@@ -603,13 +622,19 @@ cmd_update() {
 
     # 获取当前信息
     local current_url current_interval
-    read -r current_url current_interval < <(python3 -c "
+    export MIHOMO_CONFIG="$CONFIG_FILE"
+    export MIHOMO_NAME="$name"
+    read -r current_url current_interval < <(python3 << 'PYEOF' 2>/dev/null
 import yaml
-with open('$CONFIG_FILE') as f:
+import os
+config_file = os.environ.get('MIHOMO_CONFIG', '')
+name = os.environ.get('MIHOMO_NAME', '')
+with open(config_file) as f:
     cfg = yaml.safe_load(f) or {}
-p = cfg.get('proxy-providers', {}).get('$name', {})
+p = cfg.get('proxy-providers', {}).get(name, {})
 print(p.get('url', ''), p.get('interval', 3600))
-" 2>/dev/null)
+PYEOF
+)
 
     echo ""
     echo -e "${WHITE}当前订阅 [$name]:${NC}"
