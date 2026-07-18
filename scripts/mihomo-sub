@@ -1,0 +1,813 @@
+#!/bin/bash
+# mihomo-sub - 订阅管理主脚本
+# 用法: mihomo-sub [add|update|remove|list|refresh|filter] [参数]
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../lib/common.sh"
+source "$SCRIPT_DIR/../lib/detect.sh"
+source "$SCRIPT_DIR/../lib/service.sh"
+source "$SCRIPT_DIR/../lib/filter.sh"
+
+CONFIG_DIR="${HOME}/.config/mihomo"
+CONFIG_FILE="$CONFIG_DIR/config.yaml"
+
+# ===== 辅助函数 =====
+
+# 列出所有订阅
+get_providers() {
+    if [[ -f "$CONFIG_FILE" ]]; then
+        python3 -c "
+import yaml, sys
+with open('$CONFIG_FILE') as f:
+    cfg = yaml.safe_load(f) or {}
+providers = cfg.get('proxy-providers', {}) or {}
+for name in providers:
+    print(name)
+" 2>/dev/null
+    fi
+}
+
+# 列出所有代理组
+get_all_groups() {
+    if [[ -f "$CONFIG_FILE" ]]; then
+        python3 -c "
+import yaml, sys
+with open('$CONFIG_FILE') as f:
+    cfg = yaml.safe_load(f) or {}
+groups = cfg.get('proxy-groups', []) or []
+for g in groups:
+    print(g.get('name', ''))
+" 2>/dev/null
+    fi
+}
+
+# 获取可用代理组（url-test 和 fallback 类型，排除手动选择组）
+get_available_groups() {
+    python3 -c "
+import yaml, sys
+
+with open('$CONFIG_FILE') as f:
+    cfg = yaml.safe_load(f) or {}
+
+groups = cfg.get('proxy-groups', [])
+for g in groups:
+    name = g.get('name', '')
+    gtype = g.get('type', '')
+    if gtype in ('url-test', 'fallback', 'load-balance'):
+        if '手动' not in name and 'select' not in name.lower():
+            print(name)
+" 2>/dev/null
+}
+
+# 从列表中选择一个订阅
+select_provider() {
+    local action=$1
+    local providers=$(get_providers)
+
+    if [[ -z "$providers" ]]; then
+        log_warn "没有可${action}的订阅"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${WHITE}可${action}的订阅:${NC}"
+    local arr=($providers)
+    for i in "${!arr[@]}"; do
+        echo "  $((i+1)). ${arr[$i]}"
+    done
+
+    echo ""
+    read -p "选择 [1-${#arr[@]}]: " idx
+
+    if [[ "$idx" =~ ^[0-9]+$ ]] && [[ $idx -ge 1 ]] && [[ $idx -le ${#arr[@]} ]]; then
+        echo "${arr[$((idx-1))]}"
+    else
+        log_error "无效选择"
+        return 1
+    fi
+}
+
+# 选择代理链（从可用代理组中选择）
+select_proxy_chain() {
+    echo ""
+    echo -e "${WHITE}此订阅是否需要通过代理下载？（订阅站被墙时需要）${NC}"
+    echo "  1. 直接下载（默认）"
+    echo "  2. 通过已有代理组下载"
+    read -p "请选择 [1]: " proxy_choice
+
+    if [[ "$proxy_choice" != "2" ]]; then
+        echo ""
+        return
+    fi
+
+    local groups=$(get_available_groups)
+
+    if [[ -z "$groups" ]]; then
+        log_warn "没有可用的代理组，将使用直连"
+        echo ""
+        return
+    fi
+
+    echo ""
+    echo -e "${WHITE}可用代理组:${NC}"
+    local arr=($groups)
+    for i in "${!arr[@]}"; do
+        echo "  $((i+1)). ${arr[$i]}"
+    done
+
+    echo ""
+    read -p "选择代理组 [1-${#arr[@]}]: " idx
+
+    if [[ "$idx" =~ ^[0-9]+$ ]] && [[ $idx -ge 1 ]] && [[ $idx -le ${#arr[@]} ]]; then
+        echo "${arr[$((idx-1))]}"
+    fi
+}
+
+# 过滤 provider 中的无效节点
+filter_provider_nodes() {
+    local name=$1
+    local provider_file="$CONFIG_DIR/providers/${name}.yaml"
+
+    if [[ ! -f "$provider_file" ]]; then
+        echo "  缓存文件不存在，跳过过滤"
+        return 0
+    fi
+
+    echo "  过滤无效节点..."
+    filter_invalid_nodes "$provider_file"
+}
+
+# 过滤所有订阅的无效节点
+filter_provider_nodes_all() {
+    local providers=$(get_providers)
+
+    if [[ -z "$providers" ]]; then
+        log_warn "没有订阅需要过滤"
+        return 0
+    fi
+
+    echo "$providers" | while read name; do
+        [[ -z "$name" ]] && continue
+        echo ""
+        log_step "过滤: $name"
+        filter_provider_nodes "$name"
+    done
+}
+
+# ===== 核心函数 =====
+
+# 添加订阅到配置
+add_provider() {
+    local name=$1
+    local url=$2
+    local interval=$3
+    local role=$4
+    local proxy_chain=$5
+
+    backup_file "$CONFIG_FILE" 2>/dev/null || true
+
+    python3 << PYEOF || { log_error "Python 处理失败"; return 1; }
+import yaml
+import sys
+
+config_file = "$CONFIG_FILE"
+name = "$name"
+url = "$url"
+interval = int("$interval")
+role = "$role"
+proxy_chain = "$proxy_chain" or None
+
+with open(config_file) as f:
+    cfg = yaml.safe_load(f) or {}
+
+# 确保必要字段存在
+if 'proxy-providers' not in cfg or cfg['proxy-providers'] is None:
+    cfg['proxy-providers'] = {}
+if 'proxy-groups' not in cfg or cfg['proxy-groups'] is None:
+    cfg['proxy-groups'] = []
+
+# 添加 provider
+provider = {
+    'type': 'http',
+    'url': url,
+    'interval': interval,
+    'path': f'./providers/{name}.yaml',
+    'health-check': {
+        'enable': True,
+        'interval': 600,
+        'url': 'http://cp.cloudflare.com/generate_204'
+    },
+    'override': {
+        'skip-cert-verify': True
+    }
+}
+if proxy_chain:
+    provider['proxy'] = proxy_chain
+
+cfg['proxy-providers'][name] = provider
+
+# 根据角色设置代理组
+if role == 'primary':
+    # 主订阅：创建独立的 url-test 组
+    group_name = f'📡 {name}'
+    group_exists = any(g['name'] == group_name for g in cfg['proxy-groups'])
+
+    if not group_exists:
+        cfg['proxy-groups'].insert(0, {
+            'name': group_name,
+            'type': 'url-test',
+            'use': [name],
+            'url': 'http://cp.cloudflare.com/generate_204',
+            'interval': 300,
+            'tolerance': 200,
+            'lazy': True
+        })
+
+    # 确保故障转移组存在并包含此组
+    ensure_fallback_group(cfg, group_name)
+    # 确保手动选择组存在
+    ensure_select_group(cfg, name, group_name)
+
+elif role == 'backup':
+    # 备用订阅：创建独立的 url-test 组，加入故障转移
+    group_name = f'📡 {name}'
+    group_exists = any(g['name'] == group_name for g in cfg['proxy-groups'])
+
+    if not group_exists:
+        # 在主订阅组之后插入
+        primary_idx = 0
+        for i, g in enumerate(cfg['proxy-groups']):
+            if '⭐' in g.get('name', '') or '主订阅' in g.get('name', ''):
+                primary_idx = i + 1
+                break
+
+        cfg['proxy-groups'].insert(primary_idx, {
+            'name': group_name,
+            'type': 'url-test',
+            'use': [name],
+            'url': 'http://cp.cloudflare.com/generate_204',
+            'interval': 300,
+            'tolerance': 200,
+            'lazy': True
+        })
+
+    # 添加到故障转移组
+    ensure_fallback_group(cfg, group_name)
+    # 添加到手动选择组
+    ensure_select_group(cfg, name, group_name)
+
+elif role == 'manual':
+    # 仅手动选择
+    ensure_select_group(cfg, name, None)
+
+# 写入配置
+with open(config_file, 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+print(f"✅ 订阅 [{name}] 已添加")
+PYEOF
+}
+
+# 确保故障转移组存在并包含指定组
+ensure_fallback_group() {
+    local group_name=$1
+
+    python3 << PYEOF
+import yaml
+
+config_file = "$CONFIG_FILE"
+group_name = "$group_name"
+
+with open(config_file) as f:
+    cfg = yaml.safe_load(f) or {}
+
+fallback_name = '🔄 故障转移'
+
+# 查找故障转移组
+fallback_group = None
+for g in cfg.get('proxy-groups', []):
+    if g['name'] == fallback_name:
+        fallback_group = g
+        break
+
+if fallback_group:
+    # 确保包含指定组（proxies 中应该是组名，不是 provider 名）
+    if group_name not in fallback_group.get('proxies', []):
+        fallback_group.setdefault('proxies', []).append(group_name)
+else:
+    # 创建故障转移组
+    # 找到主订阅组
+    primary_name = None
+    for g in cfg.get('proxy-groups', []):
+        if '⭐' in g.get('name', '') or '主订阅' in g.get('name', ''):
+            primary_name = g['name']
+            break
+
+    proxies = []
+    if primary_name:
+        proxies.append(primary_name)
+    proxies.append(group_name)
+    proxies.append('DIRECT')
+
+    # 插入到主订阅之后
+    idx = 0
+    for i, g in enumerate(cfg['proxy-groups']):
+        if '⭐' in g.get('name', '') or '主订阅' in g.get('name', ''):
+            idx = i + 1
+            break
+
+    cfg['proxy-groups'].insert(idx, {
+        'name': fallback_name,
+        'type': 'fallback',
+        'proxies': proxies,
+        'url': 'http://cp.cloudflare.com/generate_204',
+        'interval': 300,
+        'lazy': True
+    })
+
+with open(config_file, 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+PYEOF
+}
+
+# 确保手动选择组存在
+ensure_select_group() {
+    local name=$1
+    local group_name=$2
+
+    python3 << PYEOF
+import yaml
+
+config_file = "$CONFIG_FILE"
+name = "$name"
+group_name = "$group_name" or None
+
+with open(config_file) as f:
+    cfg = yaml.safe_load(f) or {}
+
+select_name = '📱 手动选择'
+
+# 查找手动选择组
+select_group = None
+for g in cfg.get('proxy-groups', []):
+    if g['name'] == select_name:
+        select_group = g
+        break
+
+if select_group:
+    # 添加到 use 列表
+    if name not in select_group.get('use', []):
+        select_group.setdefault('use', []).append(name)
+    # 如果有 group_name，也添加到 proxies
+    if group_name and group_name not in select_group.get('proxies', []):
+        select_group.setdefault('proxies', []).insert(0, group_name)
+else:
+    # 创建手动选择组
+    proxies = []
+    if group_name:
+        proxies.append(group_name)
+    proxies.append('DIRECT')
+
+    cfg['proxy-groups'].append({
+        'name': select_name,
+        'type': 'select',
+        'use': [name],
+        'proxies': proxies
+    })
+
+with open(config_file, 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+PYEOF
+}
+
+# 更新订阅
+update_provider() {
+    local name=$1
+    local new_url=$2
+    local new_interval=$3
+
+    backup_file "$CONFIG_FILE" 2>/dev/null || true
+
+    python3 << PYEOF || { log_error "Python 处理失败"; return 1; }
+import yaml
+
+config_file = "$CONFIG_FILE"
+name = "$name"
+new_url = "$new_url"
+new_interval = "$new_interval"
+
+with open(config_file) as f:
+    cfg = yaml.safe_load(f) or {}
+
+if name not in cfg.get('proxy-providers', {}):
+    print(f"❌ 订阅 [{name}] 不存在")
+    exit(1)
+
+provider = cfg['proxy-providers'][name]
+
+if new_url:
+    provider['url'] = new_url
+    print(f"  URL 已更新")
+
+if new_interval and new_interval.isdigit():
+    provider['interval'] = int(new_interval)
+    print(f"  更新间隔已设置为 {new_interval}秒")
+
+with open(config_file, 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+print(f"✅ 订阅 [{name}] 已更新")
+PYEOF
+}
+
+# 删除订阅
+remove_provider() {
+    local name=$1
+
+    backup_file "$CONFIG_FILE" 2>/dev/null || true
+
+    python3 << PYEOF || { log_error "Python 处理失败"; return 1; }
+import yaml
+
+config_file = "$CONFIG_FILE"
+name = "$name"
+
+with open(config_file) as f:
+    cfg = yaml.safe_load(f) or {}
+
+if name not in cfg.get('proxy-providers', {}):
+    print(f"❌ 订阅 [{name}] 不存在")
+    exit(1)
+
+# 删除 provider
+del cfg['proxy-providers'][name]
+
+# 从 proxy-groups 的 use 列表中移除
+for g in cfg.get('proxy-groups', []):
+    if 'use' in g and name in g['use']:
+        g['use'].remove(name)
+
+# 删除对应的 url-test 组（以 📡 name 命名的）
+group_name = f'📡 {name}'
+cfg['proxy-groups'] = [
+    g for g in cfg.get('proxy-groups', [])
+    if g.get('name') != group_name
+]
+
+# 从故障转移组中移除
+fallback_name = '🔄 故障转移'
+for g in cfg.get('proxy-groups', []):
+    if g.get('name') == fallback_name and 'proxies' in g:
+        if group_name in g['proxies']:
+            g['proxies'].remove(group_name)
+
+# 从手动选择组中移除
+select_name = '📱 手动选择'
+for g in cfg.get('proxy-groups', []):
+    if g.get('name') == select_name and 'proxies' in g:
+        if group_name in g['proxies']:
+            g['proxies'].remove(group_name)
+
+# 清理空的代理组
+cfg['proxy-groups'] = [
+    g for g in cfg.get('proxy-groups', [])
+    if g.get('use') or g.get('proxies')
+]
+
+with open(config_file, 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+print(f"✅ 订阅 [{name}] 已删除")
+PYEOF
+
+    # 删除缓存文件
+    rm -f "$CONFIG_DIR/providers/${name}.yaml"
+}
+
+# ===== 命令函数 =====
+
+# 列出所有订阅
+cmd_list() {
+    log_title "订阅列表"
+
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        log_error "配置文件不存在"
+        return 1
+    fi
+
+    python3 -c "
+import yaml
+
+with open('$CONFIG_FILE') as f:
+    cfg = yaml.safe_load(f) or {}
+
+providers = cfg.get('proxy-providers', {})
+
+if not providers:
+    print('  暂无订阅')
+else:
+    print(f'  共 {len(providers)} 个订阅:\n')
+    for name, prov in providers.items():
+        url = prov.get('url', 'N/A')
+        interval = prov.get('interval', 3600)
+        health = prov.get('health-check', {}).get('enable', False)
+        proxy_chain = prov.get('proxy', '')
+
+        print(f'  📡 {name}')
+        if len(url) > 60:
+            print(f'     URL: {url[:60]}...')
+        else:
+            print(f'     URL: {url}')
+        print(f'     更新间隔: {interval}秒')
+        print(f'     健康检查: {\"✓\" if health else \"✗\"}')
+        if proxy_chain:
+            print(f'     代理链: {proxy_chain}')
+        print()
+" 2>/dev/null
+}
+
+# 添加订阅
+cmd_add() {
+    log_title "添加订阅"
+
+    # 检查配置文件
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        log_error "配置文件不存在: $CONFIG_FILE"
+        echo "   请先运行 install.sh"
+        return 1
+    fi
+
+    # 显示现有订阅
+    cmd_list
+
+    # 获取订阅名称
+    read -p "订阅名称: " sub_name
+    if [[ -z "$sub_name" ]]; then
+        log_error "名称不能为空"
+        return 1
+    fi
+
+    # 检查是否已存在
+    if python3 -c "
+import yaml
+with open('$CONFIG_FILE') as f:
+    cfg = yaml.safe_load(f) or {}
+exit(0 if '$sub_name' in cfg.get('proxy-providers', {}) else 1)
+" 2>/dev/null; then
+        log_error "订阅 [$sub_name] 已存在"
+        echo "  使用 mihomo-sub update 更新，或 mihomo-sub remove 删除后重新添加"
+        return 1
+    fi
+
+    # 获取订阅URL
+    read -p "订阅URL: " sub_url
+    if [[ -z "$sub_url" ]]; then
+        log_error "URL 不能为空"
+        return 1
+    fi
+
+    # 更新间隔
+    read -p "更新间隔(秒) [3600]: " sub_interval
+    sub_interval=${sub_interval:-3600}
+
+    # 订阅角色
+    echo ""
+    echo -e "${WHITE}订阅角色:${NC}"
+    echo "  1. ⭐ 主订阅（自动选最快节点，故障时切换到备用）"
+    echo "  2. 🔄 备用订阅（主挂了自动切换）"
+    echo "  3. 📱 仅手动选择（不参与自动切换）"
+    read -p "请选择 [1-3]: " role_choice
+    case $role_choice in
+        1) role="primary" ;;
+        2) role="backup" ;;
+        3) role="manual" ;;
+        *) role="primary" ;;
+    esac
+
+    # 代理链选择
+    proxy_chain=$(select_proxy_chain)
+
+    # 创建 providers 缓存目录
+    mkdir -p "$CONFIG_DIR/providers"
+
+    # 执行添加
+    echo ""
+    add_provider "$sub_name" "$sub_url" "$sub_interval" "$role" "$proxy_chain"
+
+    # 过滤无效节点
+    filter_provider_nodes "$sub_name"
+
+    # 询问是否重启
+    echo ""
+    if confirm "是否重启 mihomo 生效？" "y"; then
+        restart_service
+    fi
+}
+
+# 更新订阅
+cmd_update() {
+    log_title "更新订阅"
+
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        log_error "配置文件不存在"
+        return 1
+    fi
+
+    # 选择要更新的订阅
+    local name=$(select_provider "更新")
+    [[ -z "$name" ]] && return 1
+
+    # 获取当前信息
+    local current_url current_interval
+    read -r current_url current_interval < <(python3 -c "
+import yaml
+with open('$CONFIG_FILE') as f:
+    cfg = yaml.safe_load(f) or {}
+p = cfg.get('proxy-providers', {}).get('$name', {})
+print(p.get('url', ''), p.get('interval', 3600))
+" 2>/dev/null)
+
+    echo ""
+    echo -e "${WHITE}当前订阅 [$name]:${NC}"
+    echo "  URL: $current_url"
+    echo "  更新间隔: ${current_interval}秒"
+    echo ""
+
+    # 获取新信息
+    read -p "新 URL (回车保持不变): " new_url
+    [[ -z "$new_url" ]] && new_url="$current_url"
+
+    read -p "新更新间隔(秒) (回车保持不变): " new_interval
+    [[ -z "$new_interval" ]] && new_interval="$current_interval"
+
+    # 创建 providers 缓存目录
+    mkdir -p "$CONFIG_DIR/providers"
+
+    # 执行更新
+    echo ""
+    update_provider "$name" "$new_url" "$new_interval"
+
+    # 过滤无效节点
+    filter_provider_nodes "$name"
+
+    if confirm "是否重启生效？" "y"; then
+        restart_service
+    fi
+}
+
+# 删除订阅
+cmd_remove() {
+    log_title "删除订阅"
+
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        log_error "配置文件不存在"
+        return 1
+    fi
+
+    # 选择要删除的订阅
+    local name=$(select_provider "删除")
+    [[ -z "$name" ]] && return 1
+
+    # 确认删除
+    echo ""
+    echo -e "${RED}警告: 将删除订阅 [$name] 及其相关配置${NC}"
+    if ! confirm "确认删除？" "N"; then
+        return 0
+    fi
+
+    # 执行删除
+    remove_provider "$name"
+
+    if confirm "是否重启生效？" "y"; then
+        restart_service
+    fi
+}
+
+# 刷新所有订阅
+cmd_refresh() {
+    log_title "刷新订阅"
+
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        log_error "配置文件不存在"
+        return 1
+    fi
+
+    # 获取所有订阅名称
+    local providers=$(get_providers)
+
+    if [[ -z "$providers" ]]; then
+        log_warn "没有订阅需要刷新"
+        return 0
+    fi
+
+    echo "$providers" | while read name; do
+        [[ -z "$name" ]] && continue
+
+        echo ""
+        log_step "刷新: $name"
+        filter_provider_nodes "$name"
+    done
+
+    echo ""
+    log_info "刷新完成"
+
+    if confirm "是否重启生效？" "y"; then
+        restart_service
+    fi
+}
+
+# 过滤所有订阅的无效节点
+cmd_filter() {
+    log_title "过滤所有订阅的无效节点"
+
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        log_error "配置文件不存在"
+        return 1
+    fi
+
+    cmd_list
+    echo ""
+    filter_provider_nodes_all
+}
+
+# ===== 交互式菜单 =====
+
+show_menu() {
+    log_title "mihomo-sub 订阅管理"
+
+    echo -e "  ${WHITE}订阅操作${NC}"
+    echo "    1) 📡 添加订阅"
+    echo "    2) 🔄 更新订阅"
+    echo "    3) 🗑️  删除订阅"
+    echo "    4) 📋 列出订阅"
+    echo ""
+    echo -e "  ${WHITE}维护操作${NC}"
+    echo "    5) 🔃 刷新所有订阅"
+    echo "    6) 🩺 过滤无效节点"
+    echo ""
+    echo -e "  ${WHITE}其他${NC}"
+    echo "    0) 退出"
+    echo ""
+}
+
+# ===== 主流程 =====
+
+# 检查配置文件
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    log_error "配置文件不存在: $CONFIG_FILE"
+    echo "   请先运行 install.sh"
+    exit 1
+fi
+
+# 支持命令行参数
+case "${1:-}" in
+    list|ls)
+        cmd_list
+        ;;
+    add)
+        cmd_add
+        ;;
+    update|up)
+        cmd_update
+        ;;
+    remove|rm|delete)
+        cmd_remove
+        ;;
+    refresh)
+        cmd_refresh
+        ;;
+    filter)
+        cmd_filter
+        ;;
+    *)
+        # 交互式菜单
+        while true; do
+            show_menu
+            read -p "请选择 [0-6]: " choice
+            echo ""
+
+            case $choice in
+                1) cmd_add ;;
+                2) cmd_update ;;
+                3) cmd_remove ;;
+                4) cmd_list ;;
+                5) cmd_refresh ;;
+                6)
+                    cmd_filter
+                    ;;
+                0|q|Q)
+                    echo -e "${GREEN}再见${NC}"
+                    exit 0
+                    ;;
+                *)
+                    log_error "无效选择"
+                    ;;
+            esac
+
+            echo ""
+            read -p "按 Enter 返回菜单..." _
+        done
+        ;;
+esac
