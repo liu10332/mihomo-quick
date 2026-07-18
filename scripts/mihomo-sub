@@ -191,6 +191,87 @@ interval = int(os.environ.get('MIHOMO_INTERVAL', '3600'))
 role = os.environ.get('MIHOMO_ROLE', 'primary')
 proxy_chain = os.environ.get('MIHOMO_PROXY_CHAIN', '') or None
 
+# ===== 辅助函数 =====
+
+def ensure_fallback_group(cfg, group_name):
+    """确保故障转移组存在并包含指定组"""
+    fallback_name = '🔄 故障转移'
+
+    # 查找故障转移组
+    fallback_group = None
+    for g in cfg.get('proxy-groups', []):
+        if g['name'] == fallback_name:
+            fallback_group = g
+            break
+
+    if fallback_group:
+        # 确保包含指定组
+        if group_name not in fallback_group.get('proxies', []):
+            fallback_group.setdefault('proxies', []).append(group_name)
+    else:
+        # 创建故障转移组
+        primary_name = None
+        for g in cfg.get('proxy-groups', []):
+            if '⭐' in g.get('name', '') or '主订阅' in g.get('name', ''):
+                primary_name = g['name']
+                break
+
+        proxies = []
+        if primary_name:
+            proxies.append(primary_name)
+        proxies.append(group_name)
+        proxies.append('DIRECT')
+
+        # 插入到主订阅之后
+        idx = 0
+        for i, g in enumerate(cfg['proxy-groups']):
+            if '⭐' in g.get('name', '') or '主订阅' in g.get('name', ''):
+                idx = i + 1
+                break
+
+        cfg['proxy-groups'].insert(idx, {
+            'name': fallback_name,
+            'type': 'fallback',
+            'proxies': proxies,
+            'url': 'http://cp.cloudflare.com/generate_204',
+            'interval': 300,
+            'lazy': True
+        })
+
+def ensure_select_group(cfg, provider_name, group_name):
+    """确保手动选择组存在"""
+    select_name = '📱 手动选择'
+
+    # 查找手动选择组
+    select_group = None
+    for g in cfg.get('proxy-groups', []):
+        if g['name'] == select_name:
+            select_group = g
+            break
+
+    if select_group:
+        # 添加到 use 列表
+        if provider_name not in select_group.get('use', []):
+            select_group.setdefault('use', []).append(provider_name)
+        # 如果有 group_name，也添加到 proxies
+        if group_name and group_name not in select_group.get('proxies', []):
+            select_group.setdefault('proxies', []).insert(0, group_name)
+    else:
+        # 创建手动选择组
+        proxies = []
+        if group_name:
+            proxies.append(group_name)
+        proxies.append('DIRECT')
+
+        cfg['proxy-groups'].append({
+            'name': select_name,
+            'type': 'select',
+            'use': [provider_name],
+            'proxies': proxies
+        })
+
+# ===== 主逻辑 =====
+
 with open(config_file) as f:
     cfg = yaml.safe_load(f) or {}
 
@@ -279,118 +360,6 @@ with open(config_file, 'w') as f:
     yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 print(f"✅ 订阅 [{name}] 已添加")
-PYEOF
-}
-
-# 确保故障转移组存在并包含指定组
-ensure_fallback_group() {
-    local group_name=$1
-
-    python3 << PYEOF
-import yaml
-
-config_file = "$CONFIG_FILE"
-group_name = "$group_name"
-
-with open(config_file) as f:
-    cfg = yaml.safe_load(f) or {}
-
-fallback_name = '🔄 故障转移'
-
-# 查找故障转移组
-fallback_group = None
-for g in cfg.get('proxy-groups', []):
-    if g['name'] == fallback_name:
-        fallback_group = g
-        break
-
-if fallback_group:
-    # 确保包含指定组（proxies 中应该是组名，不是 provider 名）
-    if group_name not in fallback_group.get('proxies', []):
-        fallback_group.setdefault('proxies', []).append(group_name)
-else:
-    # 创建故障转移组
-    # 找到主订阅组
-    primary_name = None
-    for g in cfg.get('proxy-groups', []):
-        if '⭐' in g.get('name', '') or '主订阅' in g.get('name', ''):
-            primary_name = g['name']
-            break
-
-    proxies = []
-    if primary_name:
-        proxies.append(primary_name)
-    proxies.append(group_name)
-    proxies.append('DIRECT')
-
-    # 插入到主订阅之后
-    idx = 0
-    for i, g in enumerate(cfg['proxy-groups']):
-        if '⭐' in g.get('name', '') or '主订阅' in g.get('name', ''):
-            idx = i + 1
-            break
-
-    cfg['proxy-groups'].insert(idx, {
-        'name': fallback_name,
-        'type': 'fallback',
-        'proxies': proxies,
-        'url': 'http://cp.cloudflare.com/generate_204',
-        'interval': 300,
-        'lazy': True
-    })
-
-with open(config_file, 'w') as f:
-    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-PYEOF
-}
-
-# 确保手动选择组存在
-ensure_select_group() {
-    local name=$1
-    local group_name=$2
-
-    python3 << PYEOF
-import yaml
-
-config_file = "$CONFIG_FILE"
-name = "$name"
-group_name = "$group_name" or None
-
-with open(config_file) as f:
-    cfg = yaml.safe_load(f) or {}
-
-select_name = '📱 手动选择'
-
-# 查找手动选择组
-select_group = None
-for g in cfg.get('proxy-groups', []):
-    if g['name'] == select_name:
-        select_group = g
-        break
-
-if select_group:
-    # 添加到 use 列表
-    if name not in select_group.get('use', []):
-        select_group.setdefault('use', []).append(name)
-    # 如果有 group_name，也添加到 proxies
-    if group_name and group_name not in select_group.get('proxies', []):
-        select_group.setdefault('proxies', []).insert(0, group_name)
-else:
-    # 创建手动选择组
-    proxies = []
-    if group_name:
-        proxies.append(group_name)
-    proxies.append('DIRECT')
-
-    cfg['proxy-groups'].append({
-        'name': select_name,
-        'type': 'select',
-        'use': [name],
-        'proxies': proxies
-    })
-
-with open(config_file, 'w') as f:
-    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 PYEOF
 }
 
