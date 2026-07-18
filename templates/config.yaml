@@ -1,0 +1,59 @@
+# mihomo-quick 配置文件模板
+# 变量由 install 脚本替换: {HTTP_PORT}, {SOCKS_PORT}, {API_PORT}, {API_SECRET}, {CONFIG_DIR}, {TUN_ENABLE}, {TUN_DEVICE}, {TUN_GATEWAY}
+
+mixed-port: {HTTP_PORT}
+socks-port: {SOCKS_PORT}
+allow-lan: true
+bind-address: '*'
+mode: rule
+log-level: info
+external-controller: 0.0.0.0:{API_PORT}
+secret: '{API_SECRET}'
+external-ui: {CONFIG_DIR}/dashboard
+
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+  - '*.lan'
+  - localhost.ptlogin2.qq.com
+  default-nameserver:
+  - 223.5.5.5
+  - 119.29.29.29
+  nameserver:
+  - 223.5.5.5
+  - 119.29.29.29
+  - tls://dns.alidns.com
+  - tls://dot.pub
+
+# TUN 模式配置
+tun:
+  enable: {TUN_ENABLE}
+  stack: system
+  dns-hijack:
+  - any:53
+  auto-route: true
+  auto-detect-interface: true
+  device: {TUN_DEVICE}
+  mtu: 9000
+  strict-route: true
+  gateway: {TUN_GATEWAY}
+
+# GeoX 镜像源（加速下载）
+geox-url:
+  geoip: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+  geosite: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+  mmdb: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb"
+
+# 订阅配置（由 mihomo-add-sub 管理，也可手动编辑）
+proxy-providers: {}
+
+# 代理组配置（由 mihomo-add-sub 管理，也可手动编辑）
+proxy-groups: []
+
+# 规则配置（由 mihomo-rules 管理，也可手动编辑）
+rules:
+- DOMAIN-SUFFIX,anthropic.com,DIRECT
+- DOMAIN-SUFFIX,bigmodel.cn,DIRECT

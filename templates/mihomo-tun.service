@@ -1,0 +1,46 @@
+[Unit]
+Description=Mihomo (Clash.Meta) Proxy Service with TUN
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={USER}
+Group={USER}
+
+# 启动前创建 TUN 设备
+ExecStartPre=-/sbin/ip tuntap add {TUN_DEVICE} mode tun
+ExecStartPre=-/sbin/ip addr add {TUN_GATEWAY}/24 dev {TUN_DEVICE}
+ExecStartPre=-/sbin/ip link set {TUN_DEVICE} up
+
+ExecStartPre=-{BIN_DIR}/mihomo-auto-update
+ExecStart={BIN_DIR}/mihomo-core -d {CONFIG_DIR}
+ExecReload=/bin/kill -HUP $MAINPID
+
+# 停止后清理 TUN 设备
+ExecStopPost=-/sbin/ip tuntap del {TUN_DEVICE} mode tun
+
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+TimeoutStartSec=30
+SuccessExitStatus=0 143
+KillMode=control-group
+LimitNOFILE=65535
+
+Environment=HOME={HOME}
+Environment=TMPDIR=/tmp
+Environment=HTTP_PROXY=http://127.0.0.1:7890
+Environment=HTTPS_PROXY=http://127.0.0.1:7890
+Environment=ALL_PROXY=socks5://127.0.0.1:7891
+Environment=http_proxy=http://127.0.0.1:7890
+Environment=https_proxy=http://127.0.0.1:7890
+Environment=all_proxy=socks5://127.0.0.1:7891
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mihomo
+
+[Install]
+WantedBy=multi-user.target
