@@ -1,14 +1,23 @@
-# mihomo-quick - 通用部署工具
+# mihomo-quick
 
-轻量级 mihomo (Clash.Meta) 通用 Linux 快速部署工具，支持主流发行版和多种架构。
+轻量级 mihomo (Clash.Meta) 通用 Linux 快速部署工具。
 
 ## 特性
 
-- ✅ **离线安装**：预打包 GeoIP/GeoSite 数据库，无需网络即可完成安装
-- ✅ **智能分流**：内置 `GEOSITE,cn,DIRECT` 规则，精准识别国内流量
-- ✅ **自动更新**：每次启动 mihomo 时自动检查并更新 GeoIP/GeoSite（7 天一次）
-- ✅ **一键部署**：自动下载 mihomo、安装面板、配置服务
-- ✅ **通用支持**：支持 Ubuntu 18+、CentOS 7+、Arch Linux 等主流发行版
+- ✅ **通用支持**: 适配 Ubuntu/Debian, CentOS/RHEL, Arch Linux
+- ✅ **自动检测**: TUN 设备、可用端口、系统架构、发行版
+- ✅ **智能分流**: 内置 `GEOSITE,cn,DIRECT` 规则，精准识别国内流量
+- ✅ **订阅管理**: 支持添加/更新/删除/刷新订阅，自动过滤无效节点
+- ✅ **故障转移**: 多订阅自动切换，主订阅故障时自动切换到备用
+- ✅ **安全默认**: API 绑定 localhost，自动生成随机密钥
+- ✅ **离线安装**: 预打包 GeoIP/GeoSite 数据库
+- ✅ **一键部署**: 自动下载 mihomo、安装面板、配置服务
+
+## 系统要求
+
+- Linux (Ubuntu 18+, CentOS 7+, Arch Linux)
+- x86_64 / aarch64 / armv7 架构
+- 依赖: curl, python3, tar, gzip
 
 ## 安装
 
@@ -19,30 +28,27 @@ cd mihomo-quick
 ```
 
 安装脚本会自动：
-- 下载 mihomo 二进制（已安装时对比版本，支持增量更新）
-- 安装 MetaCubeXD Web 面板（已安装时可选择更新）
-- **复制 GeoIP/GeoSite 数据库**（离线可用）
-- 创建 systemd 服务
+- 下载 mihomo 二进制
+- 安装 MetaCubeXD Web 面板
+- 复制 GeoIP/GeoSite 数据库
+- 创建 systemd 服务（支持开机自启）
 - 安装管理脚本到 `~/.local/bin/`
-- 配置代理环境变量
 
 ## 快速开始
 
 ```bash
-# 1. 加载代理环境
-source ~/.bashrc
-
-# 2. 打开管理菜单
+# 1. 打开管理菜单
 mihomo
 
+# 2. 在菜单中选择「添加订阅」
 # 3. 在菜单中选择「安装/更新服务」设置开机自启
-
-# 4. 在菜单中选择「添加订阅」
 ```
 
 ## 管理菜单
 
-安装完成后直接运行 `mihomo` 打开交互式管理菜单：
+```bash
+mihomo
+```
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -85,40 +91,45 @@ mihomo-sub update       # 更新订阅
 mihomo-sub remove       # 删除订阅
 mihomo-sub list         # 列出订阅
 mihomo-sub refresh      # 刷新所有订阅
+mihomo-sub filter       # 过滤无效节点
 ```
+
+### 订阅角色
+
+- **主订阅** ⭐ - 自动选择最快节点，故障时切换到备用
+- **备用订阅** 🔄 - 主订阅故障时自动切换
+- **手动选择** 📱 - 仅在手动选择时使用
 
 ### 节点过滤
 
 系统会自动过滤以下类型的无效节点：
-- 官网信息
-- 剩余流量/套餐到期
-- Telegram 群组/频道
+- 官网信息（官网、Website）
+- 流量信息（剩余流量、套餐到期）
+- 群组信息（TG群、Telegram、频道）
 
-**注意**：临时失效的真实节点不会被删除。
+**注意**：临时失效的真实节点不会被删除，系统会持续监控并在恢复后自动使用。
+
+### 故障转移
+
+每个订阅会创建独立的 url-test 组，故障转移组会按顺序尝试：
+
+```
+📡 主订阅 (url-test) → 📡 备用订阅 (url-test) → DIRECT
+```
 
 ## 命令速查
-
-除管理菜单外，所有功能也可通过独立命令使用：
 
 | 命令 | 说明 |
 |------|------|
 | `mihomo` | 打开管理菜单（推荐） |
+| `mihomo-sub` | 订阅管理 |
 | `mihomo-update` | 检查更新内核/面板/GeoIP/GeoSite |
-| `mihomo-update geosite` | 单独更新 GeoSite 数据库 |
-| `mihomo-auto-update` | 手动触发 GeoIP/GeoSite 更新 |
-| `mihomo-auto-update --force` | 强制更新（忽略 7 天时间限制） |
-| `mihomo-add-sub` | 交互式添加订阅（支持主/备/手动优先级） |
 | `mihomo-rules` | 查看/添加/删除代理规则 |
 | `mihomo-check` | 校验配置文件 |
 | `mihomo-rollback` | 配置备份与回滚 |
 | `mihomo-logs` | 查看日志 |
 | `mihomo-uninstall` | 卸载 |
-| `proxy-start` | 启动 mihomo |
-| `proxy-stop` | 停止 mihomo |
-| `proxy-restart` | 重启 mihomo |
-| `proxy-status` | 查看运行状态 |
-| `proxy-test` | 综合代理测试 |
-| `proxy-env on/off/status` | 管理代理环境变量 |
+| `test-all-proxy` | 综合代理测试 |
 
 ## 服务管理
 
@@ -129,9 +140,19 @@ mihomo-sub refresh      # 刷新所有订阅
 
 或在管理菜单中选择「安装/更新服务」。
 
+### systemd 服务
+
+```bash
+sudo systemctl start mihomo      # 启动
+sudo systemctl stop mihomo       # 停止
+sudo systemctl restart mihomo    # 重启
+sudo systemctl status mihomo     # 状态
+sudo systemctl enable mihomo     # 开机自启
+```
+
 ## 配置文件
 
-所有配置集中在 `~/.config/mihomo/config.yaml`，可直接编辑：
+配置文件位于 `~/.config/mihomo/config.yaml`：
 
 ```yaml
 # 订阅
@@ -144,18 +165,18 @@ proxy-providers:
 
 # 代理组
 proxy-groups:
-- name: ⭐ 主订阅
+- name: 📡 我的订阅
   type: url-test
   use: [我的订阅]
 
 # 规则
 rules:
-- DOMAIN-SUFFIX,google.com,🔄 故障转移
+- GEOSITE,cn,DIRECT
 - GEOIP,CN,DIRECT
 - MATCH,🔄 故障转移
 ```
 
-修改后运行 `mihomo-check` 校验，再 `proxy-restart` 生效。
+修改后运行 `mihomo-check` 校验，再重启服务生效。
 
 ## 目录结构
 
@@ -165,20 +186,46 @@ rules:
 ├── providers/            # 订阅缓存
 ├── backups/              # 配置备份
 ├── dashboard/            # MetaCubeXD 面板
-├── geoip.metadb          # GeoIP 数据（自动更新）
-├── geosite.dat           # GeoSite 数据（自动更新）
-└── cache.db              # DNS 缓存
+├── geoip.metadb          # GeoIP 数据
+└── geosite.dat           # GeoSite 数据
 
 ~/.local/bin/
-├── mihomo                # 管理菜单入口
+├── mihomo                # 管理菜单
+├── mihomo-sub            # 订阅管理
 ├── mihomo-core           # mihomo 二进制
-├── mihomo-start/stop/... # 管理脚本
-├── mihomo-auto-update    # GeoIP/GeoSite 自动更新脚本
-└── set-proxy-env         # 代理环境变量
+└── ...
 
-~/.cache/mihomo/
-├── auto-update.log       # 自动更新日志
-└── last-update.stamp     # 上次更新时间戳
+~/.mihomo-quick/lib/      # 函数库
+├── common.sh             # 公共函数
+├── detect.sh             # 系统检测
+├── network.sh            # 网络工具
+├── service.sh            # 服务管理
+└── filter.sh             # 节点过滤
+```
+
+## 自动检测
+
+安装脚本会自动检测：
+
+- **架构**: x86_64, aarch64, armv7
+- **发行版**: Ubuntu, Debian, CentOS, RHEL, Arch
+- **TUN 设备**: 自动检测可用设备名
+- **端口**: 自动检测可用端口避免冲突
+- **防火墙**: 自动配置 ufw/firewalld/iptables
+
+## 安全特性
+
+- **API 绑定**: 默认仅绑定 127.0.0.1
+- **随机密钥**: 自动生成随机 API 密钥
+- **非 root 支持**: 支持以普通用户运行服务
+
+## Web 面板
+
+访问地址：`http://127.0.0.1:9090/ui?token=<密钥>`
+
+密钥可在配置文件中查看：
+```bash
+grep "secret:" ~/.config/mihomo/config.yaml
 ```
 
 ## 卸载
@@ -187,90 +234,31 @@ rules:
 mihomo-uninstall
 ```
 
-## 系统要求
-
-- **操作系统**: Linux (Ubuntu 18+, CentOS 7+, Arch Linux)
-- **架构**: x86_64 / aarch64 / armv7
-- **依赖**: curl, python3, tar, gzip
-
-## 自动检测
-
-安装脚本会自动检测以下内容：
-
-- **架构**: 自动检测 CPU 架构并选择对应的 mihomo 二进制
-- **发行版**: 自动检测 Linux 发行版并安装相应依赖
-- **TUN 设备**: 检测 TUN 设备可用性以支持透明代理模式
-- **可用端口**: 自动检测并分配可用的 HTTP/SOCKS5 端口
-- **防火墙配置**: 自动配置防火墙规则以允许代理流量
-
-## 安全特性
-
-- **API 绑定**: 默认仅绑定到 127.0.0.1，确保安全访问
-- **随机密钥**: 自动生成随机 API 密钥，防止未授权访问
-- **非 root 支持**: 支持以普通用户身份运行，无需 root 权限
-
-## 自动更新机制
-
-mihomo-quick 内置 GeoIP/GeoSite 数据库自动更新功能：
-
-- **触发时机**：每次启动或重启 mihomo 服务时
-- **更新频率**：7 天检查一次（避免频繁下载）
-- **更新内容**：`geoip.metadb`（IP 地理位置）和 `geosite.dat`（域名分类）
-
-### 工作原理
-
-```
-mihomo 启动
-    ↓
-ExecStartPre: mihomo-auto-update
-    ↓
-检查距上次更新是否超过 7 天
-    ↓
-├─ 不足 7 天 → 跳过，直接启动
-└─ 超过 7 天 → 下载更新 → 启动
-```
-
-### 手动更新
-
-```bash
-# 完整更新（交互式）
-mihomo-auto-update
-
-# 强制更新（忽略 7 天限制）
-mihomo-auto-update --force
-
-# 查看更新日志
-cat ~/.cache/mihomo/auto-update.log
-
-# 查看上次更新时间
-date -d @$(cat ~/.cache/mihomo/last-update.stamp)
-```
-
-### 离线安装
-
-项目预打包了 GeoIP/GeoSite 数据库，即使没有网络也能完成安装：
-
-- `config/geoip.metadb`（约 9MB）
-- `config/geosite.dat`（约 4MB）
-
-安装时会自动复制到 `~/.config/mihomo/` 目录。
-
 ## 更新日志
+
+### v2.0.0 (2026-07-18)
+
+- ✨ **通用化重构**: 支持任意 Linux 发行版
+- ✨ **订阅管理**: 支持添加/更新/删除/刷新订阅
+- ✨ **节点过滤**: 自动过滤官网、流量、群组等无效节点
+- ✨ **故障转移修复**: 正确的多订阅故障转移链
+- ✨ **代理链选择**: 自动检测可用代理组
+- 🔧 **Python heredoc 修复**: 使用环境变量避免特殊字符问题
+- 🔧 **Unicode 支持**: 修复代理组名称中的 emoji 显示问题
+- 🔧 **路径变量化**: 支持自定义安装目录
+- 🔧 **错误处理**: 网络失败时不再中断安装
 
 ### v1.1.0 (2026-06-05)
 
-- ✨ 新增 `GEOSITE,cn,DIRECT` 规则，精准分流国内流量
-- ✨ 预打包 GeoIP/GeoSite 数据库，支持离线安装
-- ✨ 启动时自动检查更新 GeoIP/GeoSite（7 天一次）
-- ✨ `mihomo-update` 支持单独更新 geosite
-- 🔧 优化默认配置，完善 DNS 设置
+- ✨ 新增 `GEOSITE,cn,DIRECT` 规则
+- ✨ 预打包 GeoIP/GeoSite 数据库
+- ✨ 启动时自动检查更新 GeoIP/GeoSite
+- 🔧 优化默认配置
 
 ### v1.0.0
 
 - 初始版本
 - 支持 mihomo 内核安装与更新
 - 支持 MetaCubeXD 面板安装
-- 支持订阅管理
-- 支持规则管理
 - 支持 systemd 服务管理
 ```
