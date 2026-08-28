@@ -47,10 +47,20 @@ show_system_info() {
 
 check_required_deps() {
     log_step "检查依赖..."
-    local required=("curl" "tar" "openssl")
+    local required=("curl" "tar" "openssl" "python3")
 
     if ! check_dependencies "${required[@]}"; then
         die "缺少必要依赖，请先安装: ${required[*]}"
+    fi
+
+    # PyYAML: 订阅/规则管理脚本必备，缺失会导致脚本静默失败
+    if ! python3 -c "import yaml" 2>/dev/null; then
+        log_error "缺少 Python 模块: PyYAML"
+        echo "   Debian/Ubuntu: sudo apt install -y python3-yaml"
+        echo "   CentOS/RHEL:   sudo yum install -y python3-PyYAML"
+        echo "   Arch:          sudo pacman -S --noconfirm python-yaml"
+        echo "   或使用 pip:    pip3 install pyyaml"
+        die "请安装 PyYAML 后重新运行本脚本"
     fi
 
     log_info "依赖检查通过"
@@ -214,6 +224,19 @@ install_scripts() {
     cp "$SCRIPT_DIR/lib/"*.sh "$HOME/.mihomo-quick/lib/"
     log_info "库文件已复制到 ~/.mihomo-quick/lib/"
 
+    # 复制 systemd 服务模板（菜单"安装/更新服务"的 install_service 依赖）
+    local svc_src=""
+    if [[ -f "$SCRIPT_DIR/systemd/mihomo.service" ]]; then
+        svc_src="$SCRIPT_DIR/systemd"
+    elif [[ -f "$SCRIPT_DIR/templates/mihomo.service" ]]; then
+        svc_src="$SCRIPT_DIR/templates"
+    fi
+    if [[ -n "$svc_src" ]]; then
+        mkdir -p "$HOME/.mihomo-quick/systemd"
+        cp "$svc_src/"*.service "$HOME/.mihomo-quick/systemd/"
+        log_info "服务模板已复制到 ~/.mihomo-quick/systemd/"
+    fi
+
     local scripts=(
         scripts/mihomo-menu       mihomo
         scripts/mihomo-start      mihomo-start
@@ -266,6 +289,13 @@ install_scripts() {
     if [[ -f "$SCRIPT_DIR/scripts/uninstall.sh" ]]; then
         cp "$SCRIPT_DIR/scripts/uninstall.sh" "$HOME/.local/bin/mihomo-uninstall"
         chmod +x "$HOME/.local/bin/mihomo-uninstall"
+    fi
+
+    # 复制 setup-service.sh（菜单"安装/更新服务"依赖）
+    if [[ -f "$SCRIPT_DIR/setup-service.sh" ]]; then
+        cp "$SCRIPT_DIR/setup-service.sh" "$HOME/.local/bin/setup-service.sh"
+        chmod +x "$HOME/.local/bin/setup-service.sh"
+        log_info "setup-service.sh 已安装到 ~/.local/bin/"
     fi
 
     # 安装 auto-update 脚本

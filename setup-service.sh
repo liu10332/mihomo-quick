@@ -3,9 +3,19 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/lib/common.sh"
-source "$SCRIPT_DIR/lib/detect.sh"
-source "$SCRIPT_DIR/lib/service.sh"
+
+# 加载函数库: 优先仓库位置(SCRIPT_DIR/lib)，回退安装位置(~/.mihomo-quick/lib)
+if [[ -f "$SCRIPT_DIR/lib/common.sh" ]]; then
+    _LIB_DIR="$SCRIPT_DIR/lib"
+elif [[ -f "$HOME/.mihomo-quick/lib/common.sh" ]]; then
+    _LIB_DIR="$HOME/.mihomo-quick/lib"
+else
+    echo "❌ 找不到函数库 (lib/common.sh)，请先运行 install.sh" >&2
+    exit 1
+fi
+source "$_LIB_DIR/common.sh"
+source "$_LIB_DIR/detect.sh"
+source "$_LIB_DIR/service.sh"
 
 SERVICE_MODE="${1:-normal}"  # normal | tun
 

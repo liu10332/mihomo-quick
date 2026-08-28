@@ -22,8 +22,20 @@ SERVICE_NAME_MIHOMO="mihomo"
 SERVICE_NAME_TUN="mihomo-tun"
 SYSTEMD_DIR="/etc/systemd/system"
 
-SERVICE_FILE_MIHOMO="${SCRIPT_LIB_DIR}/../systemd/mihomo.service"
-SERVICE_FILE_TUN="${SCRIPT_LIB_DIR}/../systemd/mihomo-tun.service"
+# 服务模板路径: 兼容安装布局(~/.mihomo-quick/systemd)与仓库布局(systemd/ 或 templates/)
+SERVICE_FILE_MIHOMO=""
+SERVICE_FILE_TUN=""
+for _svc_tpl_dir in "$SCRIPT_LIB_DIR/../systemd" "$SCRIPT_LIB_DIR/../templates"; do
+    if [[ -f "${_svc_tpl_dir}/mihomo.service" ]]; then
+        SERVICE_FILE_MIHOMO="${_svc_tpl_dir}/mihomo.service"
+        SERVICE_FILE_TUN="${_svc_tpl_dir}/mihomo-tun.service"
+        break
+    fi
+done
+if [[ -z "$SERVICE_FILE_MIHOMO" ]]; then
+    SERVICE_FILE_MIHOMO="${SCRIPT_LIB_DIR}/../systemd/mihomo.service"
+    SERVICE_FILE_TUN="${SCRIPT_LIB_DIR}/../systemd/mihomo-tun.service"
+fi
 
 # ===== systemd 状态查询 =====
 
@@ -126,8 +138,20 @@ install_service() {
         log_info "已备份: $backup"
     fi
 
-    # 变量替换: /root -> $HOME, 确保路径一致
-    sudo sed "s|/root|$HOME|g" "$service_file" | sudo tee "$target" > /dev/null
+    # 变量替换: 填充模板占位符(与 install.sh 保持一致)，并兼容旧模板的 /root 硬编码
+    local svc_user svc_tun_device svc_bin_dir
+    svc_user=$(detect_current_user)
+    svc_tun_device=$(detect_tun_device)
+    svc_bin_dir="$HOME/.local/bin"
+
+    sudo sed -e "s/{USER}/$svc_user/g" \
+        -e "s|{HOME}|$HOME|g" \
+        -e "s|{BIN_DIR}|$svc_bin_dir|g" \
+        -e "s|{CONFIG_DIR}|$CONFIG_DIR|g" \
+        -e "s/{TUN_DEVICE}/$svc_tun_device/g" \
+        -e "s/{TUN_GATEWAY}/10.0.0.1/g" \
+        -e "s|/root|$HOME|g" \
+        "$service_file" | sudo tee "$target" > /dev/null
     sudo systemctl daemon-reload
     log_info "服务已安装: $target"
 

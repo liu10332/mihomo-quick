@@ -16,6 +16,15 @@ service_status() {
     esac
 }
 
+# 查找 setup-service.sh: 安装布局(~/.local/bin 同级)优先，回退仓库布局(../setup-service.sh)
+find_setup_service() {
+    if [[ -f "$SCRIPT_DIR/setup-service.sh" ]]; then
+        echo "$SCRIPT_DIR/setup-service.sh"
+    elif [[ -f "$SCRIPT_DIR/../setup-service.sh" ]]; then
+        echo "$SCRIPT_DIR/../setup-service.sh"
+    fi
+}
+
 # 版本信息
 version_info() {
     if [[ -x "$MIHOMO_BIN" ]]; then
@@ -82,10 +91,11 @@ while true; do
             else
                 sudo systemctl start "$SERVICE_NAME_TUN" 2>/dev/null || {
                     log_warn "${SERVICE_NAME_TUN} 服务未安装，尝试通过 setup-service.sh tun 创建..."
-                    if [[ -f "$SCRIPT_DIR/../setup-service.sh" ]]; then
-                        bash "$SCRIPT_DIR/../setup-service.sh" tun
+                    SETUP=$(find_setup_service)
+                    if [[ -n "$SETUP" ]]; then
+                        bash "$SETUP" tun
                     else
-                        log_error "setup-service.sh 未找到"
+                        log_error "setup-service.sh 未找到，请重新运行 install.sh"
                     fi
                 }
             fi
@@ -159,8 +169,8 @@ while true; do
             fi
             ;;
         13)
-            SETUP="$SCRIPT_DIR/../setup-service.sh"
-            if [[ -f "$SETUP" ]]; then
+            SETUP=$(find_setup_service)
+            if [[ -n "$SETUP" ]]; then
                 echo -e "${WHITE}选择模式:${NC}"
                 echo "  1) 普通模式 (HTTP/SOCKS5)"
                 echo "  2) TUN 模式 (透明代理)"
@@ -170,7 +180,7 @@ while true; do
                     *) bash "$SETUP" ;;
                 esac
             else
-                log_error "setup-service.sh 未找到"
+                log_error "setup-service.sh 未找到，请重新运行 install.sh"
             fi
             ;;
         14)

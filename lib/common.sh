@@ -56,6 +56,29 @@ die() {
     exit 1
 }
 
+# ===== Python 依赖检查 =====
+
+# require_python_yaml
+# 检查 python3 与 PyYAML，缺失时输出安装指引并退出
+# 供依赖 YAML 解析的脚本(订阅/规则管理)在入口处调用，避免运行中静默失败
+require_python_yaml() {
+    if ! command -v python3 &>/dev/null; then
+        log_error "未找到 python3，请先安装:"
+        echo "   Debian/Ubuntu: sudo apt install -y python3"
+        echo "   CentOS/RHEL:   sudo yum install -y python3"
+        echo "   Arch:          sudo pacman -S --noconfirm python"
+        exit 1
+    fi
+    if ! python3 -c "import yaml" 2>/dev/null; then
+        log_error "缺少 Python 模块 PyYAML，请先安装:"
+        echo "   Debian/Ubuntu: sudo apt install -y python3-yaml"
+        echo "   CentOS/RHEL:   sudo yum install -y python3-PyYAML"
+        echo "   Arch:          sudo pacman -S --noconfirm python-yaml"
+        echo "   或使用 pip:    pip3 install pyyaml"
+        exit 1
+    fi
+}
+
 # ===== 确认函数 =====
 
 # confirm "提示" [默认值: y/n]

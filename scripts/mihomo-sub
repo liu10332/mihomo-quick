@@ -13,6 +13,9 @@ source "$HOME/.mihomo-quick/lib/filter.sh"
 CONFIG_DIR="${HOME}/.config/mihomo"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
 
+# 依赖检查: python3 + PyYAML（缺失时明确报错，避免交互流程被静默跳过）
+require_python_yaml
+
 # ===== 辅助函数 =====
 
 # 列出所有订阅

@@ -13,18 +13,36 @@ source "$SCRIPT_LIB_DIR/common.sh"
 [[ -f "$SCRIPT_LIB_DIR/detect.sh" ]] && source "$SCRIPT_LIB_DIR/detect.sh"
 
 # ===== GitHub 镜像站点 =====
+# 仅保留实测可用的镜像（失效镜像会各消耗 10s+ 超时，拖慢下载）
 
 GITHUB_MIRRORS=(
     "https://ghfast.top"
     "https://gh-proxy.com"
-    "https://mirror.ghproxy.com"
-    "https://ghproxy.net"
 )
 
 # ===== 下载函数 =====
 
+# validate_download FILE URL
+# 按文件类型校验下载完整性：gzip 类文件校验 gzip 流完整性，
+# 防止连接被重置导致的截断文件被当作下载成功
+validate_download() {
+    local file="$1"
+    local url="$2"
+
+    [[ -s "$file" ]] || return 1
+
+    case "$url" in
+        *.gz|*.tgz)
+            gzip -t "$file" 2>/dev/null
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
 # download_with_mirrors URL OUTPUT DESC
-# 依次尝试镜像站点和直连，返回 0 成功 / 1 失败
+# 依次尝试镜像站点和直连，自动重试并校验完整性，返回 0 成功 / 1 失败
 download_with_mirrors() {
     local url="$1"
     local output="$2"
@@ -37,10 +55,15 @@ download_with_mirrors() {
     done
     sources+=("$url")
 
+    local source
     for source in "${sources[@]}"; do
         log_step "下载 $desc: ${source:0:80}..."
-        if curl -sL --connect-timeout 10 --max-time 300 \
-            -o "$output" "$source" 2>/dev/null && [[ -s "$output" ]]; then
+        # -f: HTTP 4xx/5xx 直接判定失败，不把错误页写入文件
+        # --retry: 单源内自动重试，缓解偶发的连接重置/截断
+        if curl -fL --connect-timeout 10 --max-time 600 \
+            --retry 2 --retry-delay 1 \
+            -o "$output" "$source" 2>/dev/null \
+            && validate_download "$output" "$url"; then
             log_info "$desc 下载成功"
             return 0
         fi
@@ -69,10 +92,20 @@ get_latest_release() {
         return 0
     fi
 
-    # 备选：通过 tags 接口
+    # 备选 1：通过 tags 接口
     tag=$(curl -s --connect-timeout 5 --max-time 10 \
         "https://api.github.com/repos/$repo/tags" 2>/dev/null \
         | grep '"name"' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+
+    if [[ -n "$tag" ]]; then
+        echo "$tag"
+        return 0
+    fi
+
+    # 备选 2：通过 releases/latest 重定向获取（api.github.com 不可达时仍可用）
+    tag=$(curl -sIL -o /dev/null -w '%{url_effective}' --connect-timeout 5 --max-time 10 \
+        "https://github.com/$repo/releases/latest" 2>/dev/null \
+        | grep -o '/tag/[^?/]*' | cut -d/ -f3)
 
     [[ -n "$tag" ]] && echo "$tag"
 }

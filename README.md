@@ -17,7 +17,7 @@
 
 - Linux (Ubuntu 18+, CentOS 7+, Arch Linux)
 - x86_64 / aarch64 / armv7 架构
-- 依赖: curl, python3, tar, gzip
+- 依赖: curl, python3 + PyYAML, tar, gzip
 
 ## 安装
 

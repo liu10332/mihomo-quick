@@ -6,6 +6,12 @@ source "$HOME/.mihomo-quick/lib/common.sh"
 source "$HOME/.mihomo-quick/lib/detect.sh"
 source "$HOME/.mihomo-quick/lib/service.sh"
 
+# 配置文件路径（service.sh 只定义 CONFIG_DIR）
+CONFIG_FILE="$CONFIG_DIR/config.yaml"
+
+# 依赖检查: python3 + PyYAML（缺失时明确报错，避免交互流程被静默跳过）
+require_python_yaml
+
 # 备份配置
 backup_before_edit() {
     backup_file "$CONFIG_FILE" 2>/dev/null || {
