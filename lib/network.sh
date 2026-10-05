@@ -23,8 +23,12 @@ GITHUB_MIRRORS=(
 # ===== 下载函数 =====
 
 # validate_download FILE URL
-# 按文件类型校验下载完整性：gzip 类文件校验 gzip 流完整性，
-# 防止连接被重置导致的截断文件被当作下载成功
+# 按文件类型校验下载完整性，防止错误页 / 截断文件被当作下载成功：
+#   gzip 类 -> gzip -t
+#   MMDB    -> 体积 + 尾部 MaxMind.com 元数据标记（截断文件没有）
+#   .dat    -> 体积 + 拒绝 HTML 错误页
+# 背景：2026-10-05 一次重启后 mihomo 起不来，就是开机 ExecStartPre 把 404
+# 错误页当成 geoip.metadb 写了进去，mihomo 自救下载又超时，服务循环失败。
 validate_download() {
     local file="$1"
     local url="$2"
@@ -34,6 +38,14 @@ validate_download() {
     case "$url" in
         *.gz|*.tgz)
             gzip -t "$file" 2>/dev/null
+            ;;
+        *.metadb)
+            [[ $(stat -c %s "$file" 2>/dev/null || echo 0) -ge 1048576 ]] || return 1
+            tail -c 8192 "$file" 2>/dev/null | grep -aq "MaxMind.com"
+            ;;
+        *.dat)
+            [[ $(stat -c %s "$file" 2>/dev/null || echo 0) -ge 524288 ]] || return 1
+            [[ "$(head -c 1 "$file" | tr -dc '<')" != "<" ]]
             ;;
         *)
             return 0

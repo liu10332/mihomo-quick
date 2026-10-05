@@ -236,6 +236,13 @@ mihomo-uninstall
 
 ## 更新日志
 
+### v2.0.1 (2026-10-06)
+
+- 🐛 **GeoIP 更新损坏修复**: `country-lite.metadb` / `country.metadb` 资产已 404，镜像返回的错误页被当成下载成功写进了 `geoip.metadb`，开机时 mihomo 因 `MMDB invalid` 循环失败起不来；统一改用正确的 `geoip.metadb` 资产
+- 🔒 **下载内容校验**: `curl -f` 拒绝 4xx/5xx，再按类型校验（MMDB 体积 + 尾部 `MaxMind.com` 标记、`.dat` 体积 + 拒绝 HTML 页、gzip 流完整性），不合格不落盘
+- 🔒 **原子替换 + 失败回滚**: 临时文件与目标同目录（`mv` 为原子改名，不会留下半截文件），替换后跑 `mihomo -t` 校验，失败自动回滚 `.bak`
+- ⏱️ **启动前更新限时 25s**: `ExecStartPre` 的更新脚本自带硬预算，避开 systemd `TimeoutStartSec=30`，镜像全部超时也不会拖垮服务启动
+
 ### v2.0.0 (2026-07-18)
 
 - ✨ **通用化重构**: 支持任意 Linux 发行版

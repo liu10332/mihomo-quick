@@ -4,13 +4,32 @@
 #   mihomo-auto-update          # 完整更新（交互式）
 #   mihomo-auto-update --silent # 静默模式（用于 systemd 启动前）
 #   mihomo-auto-update --force  # 强制更新（忽略时间检查）
+#
+# 防御要点（2026-10-05 重启事故）：
+#   1) curl 必须带 -f：否则镜像返回的 404 错误页会被当成下载成功
+#   2) 下载后按体积校验：country*.metadb 资产已 404，正确资产是 geoip.metadb
+#   3) 换文件之后跑 mihomo -t 校验，失败回滚 .bak —— 否则开机 ExecStartPre
+#      会把好库覆盖成垃圾，mihomo 自身直连 github 下载 MMDB 又超时，服务起不来
 
 set -e
 
+# 硬预算：本脚本作为 ExecStartPre 运行，而 unit 里 TimeoutStartSec=30，
+# 脚本必须先于 systemd 超时退出——`-` 前缀只忽略退出码，不忽略超时，
+# 一旦超时整个服务启动会被判失败。镜像全挂的最坏情况由这里的 timeout 兜底。
+if [ -z "${MIHOMO_UPDATE_BUDGET:-}" ]; then
+    export MIHOMO_UPDATE_BUDGET=1
+    exec timeout 25 "$0" "$@"
+fi
+
 CONFIG_DIR="${HOME}/.config/mihomo"
+MIHOMO_BIN="${HOME}/.local/bin/mihomo-core"
 LOG_FILE="${HOME}/.cache/mihomo/auto-update.log"
 STAMP_FILE="${HOME}/.cache/mihomo/last-update.stamp"
 MIRRORS=("https://ghfast.top" "https://gh-proxy.com" "")
+
+# 最小体积（字节）：低于此值一律当作错误页 / 截断文件
+MIN_GEOIP=$((1024 * 1024))    # 正常 geoip.metadb ≈ 8.4MB
+MIN_GEOSITE=$((512 * 1024))   # 正常 geosite.dat  ≈ 4.1MB
 
 # 默认 7 天更新一次
 UPDATE_INTERVAL=$((7 * 24 * 3600))
@@ -31,6 +50,7 @@ log() {
     local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
     echo "$msg" >> "$LOG_FILE"
     [ "$SILENT" = false ] && echo "$1"
+    return 0
 }
 
 # 检查是否需要更新
@@ -38,83 +58,133 @@ check_interval() {
     if [ "$FORCE" = true ]; then
         return 0  # 强制更新
     fi
-    
+
     if [ ! -f "$STAMP_FILE" ]; then
         return 0  # 从未更新过
     fi
-    
+
     local last_update=$(cat "$STAMP_FILE" 2>/dev/null || echo 0)
     local now=$(date +%s)
     local diff=$((now - last_update))
-    
+
     if [ "$diff" -lt "$UPDATE_INTERVAL" ]; then
         local days_left=$(( (UPDATE_INTERVAL - diff) / 86400 ))
         log "⏭️ 跳过更新：距上次更新不足 7 天（还剩 ${days_left} 天）"
         return 1  # 不需要更新
     fi
-    
+
     return 0
 }
 
+# 下载：-f 让 HTTP 4xx/5xx 直接失败；再按体积下限复核
 download_with_mirrors() {
     local url="$1"
     local output="$2"
     local desc="$3"
+    local min_size="${4:-$MIN_GEOIP}"
 
     for mirror in "${MIRRORS[@]}"; do
         local full="${mirror:+$mirror/}$url"
-        if curl -sL --connect-timeout 10 --max-time 120 -o "$output" "$full" && [ -s "$output" ]; then
-            return 0
+        rm -f "$output"
+        if curl -fsSL --connect-timeout 5 --max-time 30 -o "$output" "$full" 2>/dev/null; then
+            local size
+            size=$(stat -c %s "$output" 2>/dev/null || echo 0)
+            if [ "$(head -c 1 "$output" | tr -dc '<')" = "<" ]; then
+                log "⚠️ $desc 下载到的是 HTML 页面，不是数据文件"
+            elif [ "$size" -ge "$min_size" ]; then
+                return 0
+            else
+                log "⚠️ $desc 内容过小 (${size}B < ${min_size}B)，视为失败"
+            fi
         fi
     done
+    rm -f "$output"
     log "❌ $desc 下载失败"
+    return 1
+}
+
+# 用 mihomo 自身校验配置（含刚换进去的库）
+# 注意：mihomo -t 失败时退出码仍可能是 0，必须看输出行
+verify_config() {
+    local out
+    out=$(timeout 20 "$MIHOMO_BIN" -t -d "$CONFIG_DIR" 2>&1 || true)
+    if printf '%s\n' "$out" | grep -q "test is successful"; then
+        return 0
+    fi
+    log "⚠️ mihomo -t 校验未通过，末尾输出："
+    printf '%s\n' "$out" | tail -5 >> "$LOG_FILE"
     return 1
 }
 
 # 更新 GeoIP
 update_geoip() {
     local geoip_file="$CONFIG_DIR/geoip.metadb"
-    local url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.metadb"
-    local temp="/tmp/geoip-auto-update.metadb"
+    # 资产名必须是 geoip.metadb：country.metadb / country-lite.metadb 均已 404
+    local url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb"
+    # 临时文件放在配置目录内（同一文件系统）：跨目录 mv 是复制，
+    # 被 25s 预算杀掉会留下半截 geoip.metadb，正是这次事故的同款故障
+    local temp="$CONFIG_DIR/.geoip.metadb.tmp"
 
     log "📥 更新 GeoIP..."
 
-    if ! download_with_mirrors "$url" "$temp" "GeoIP"; then
-        # 尝试完整版
-        url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.metadb"
-        if ! download_with_mirrors "$url" "$temp" "GeoIP (full)"; then
-            return 1
-        fi
+    if ! download_with_mirrors "$url" "$temp" "GeoIP" "$MIN_GEOIP"; then
+        return 1
     fi
 
+    # MMDB 元数据在文件尾部，含 MaxMind.com 标记；截断/半截下载没有
+    if ! tail -c 8192 "$temp" 2>/dev/null | grep -aq "MaxMind.com"; then
+        log "❌ GeoIP 缺少 MMDB 尾部标记（疑似截断），丢弃"
+        rm -f "$temp"
+        return 1
+    fi
+
+    # 换文件前先备份；换完必须通过校验，否则回滚
     if [ -f "$geoip_file" ]; then
-        cp "$geoip_file" "${geoip_file}.bak"
+        cp -f "$geoip_file" "${geoip_file}.bak"
+    fi
+    mv "$temp" "$geoip_file"
+
+    if ! verify_config; then
+        if [ -f "${geoip_file}.bak" ]; then
+            cp -f "${geoip_file}.bak" "$geoip_file"
+            log "↩️ GeoIP 校验失败，已回滚到旧库"
+        else
+            log "⚠️ GeoIP 校验失败且没有备份，需手工修复"
+        fi
+        return 1
     fi
 
-    mv "$temp" "$geoip_file"
-    local new_size=$(du -h "$geoip_file" | cut -f1)
-    log "✅ GeoIP 已更新 ($new_size)"
+    log "✅ GeoIP 已更新 ($(du -h "$geoip_file" | cut -f1))"
 }
 
 # 更新 GeoSite
 update_geosite() {
     local geosite_file="$CONFIG_DIR/geosite.dat"
     local url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
-    local temp="/tmp/geosite-auto-update.dat"
+    local temp="$CONFIG_DIR/.geosite.dat.tmp"
 
     log "📥 更新 GeoSite..."
 
-    if ! download_with_mirrors "$url" "$temp" "GeoSite"; then
+    if ! download_with_mirrors "$url" "$temp" "GeoSite" "$MIN_GEOSITE"; then
         return 1
     fi
 
     if [ -f "$geosite_file" ]; then
-        cp "$geosite_file" "${geosite_file}.bak"
+        cp -f "$geosite_file" "${geosite_file}.bak"
+    fi
+    mv "$temp" "$geosite_file"
+
+    if ! verify_config; then
+        if [ -f "${geosite_file}.bak" ]; then
+            cp -f "${geosite_file}.bak" "$geosite_file"
+            log "↩️ GeoSite 校验失败，已回滚到旧库"
+        else
+            log "⚠️ GeoSite 校验失败且没有备份，需手工修复"
+        fi
+        return 1
     fi
 
-    mv "$temp" "$geosite_file"
-    local new_size=$(du -h "$geosite_file" | cut -f1)
-    log "✅ GeoSite 已更新 ($new_size)"
+    log "✅ GeoSite 已更新 ($(du -h "$geosite_file" | cut -f1))"
 }
 
 # 主流程

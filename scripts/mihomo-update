@@ -146,17 +146,15 @@ update_geoip() {
     read -p "   是否更新 GeoIP？ [Y/n]: " yn || true
     [[ "$yn" =~ ^[Nn]$ ]] && return 0
 
-    local url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.metadb"
-    local temp="/tmp/geoip-update.metadb"
+    # 资产名必须是 geoip.metadb：country-lite.metadb / country.metadb 已 404，
+    # 下载到 404 错误页并覆盖掉好库会让 mihomo 直接起不来（2026-10-05 事故）
+    local url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb"
+    # 临时文件放配置目录内（同一文件系统）：跨目录 mv 是复制，中断会留下半截文件
+    local temp="$CONFIG_DIR/.geoip.metadb.tmp"
 
     echo "   📥 下载中..."
     if ! download_with_mirrors "$url" "$temp" "GeoIP"; then
-        # 尝试完整版
-        echo "   尝试完整版..."
-        url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.metadb"
-        if ! download_with_mirrors "$url" "$temp" "GeoIP (full)"; then
-            return 1
-        fi
+        return 1
     fi
 
     if [[ -f "$geoip_file" ]]; then
@@ -164,6 +162,15 @@ update_geoip() {
     fi
 
     mv "$temp" "$geoip_file"
+
+    if ! verify_config; then
+        if [[ -f "${geoip_file}.bak" ]]; then
+            cp "${geoip_file}.bak" "$geoip_file"
+            log_warn "GeoIP 校验失败，已回滚到旧库"
+        fi
+        return 1
+    fi
+
     local new_size
     new_size=$(du -h "$geoip_file" | cut -f1)
     log_info "GeoIP 已更新 ($new_size)"
@@ -191,7 +198,8 @@ update_geosite() {
     [[ "$yn" =~ ^[Nn]$ ]] && return 0
 
     local url="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
-    local temp="/tmp/geosite-update.dat"
+    # 临时文件放配置目录内（同一文件系统），保证 mv 是原子改名
+    local temp="$CONFIG_DIR/.geosite.dat.tmp"
 
     echo "   📥 下载中..."
     if ! download_with_mirrors "$url" "$temp" "GeoSite"; then
@@ -203,9 +211,33 @@ update_geosite() {
     fi
 
     mv "$temp" "$geosite_file"
+
+    if ! verify_config; then
+        if [[ -f "${geosite_file}.bak" ]]; then
+            cp "${geosite_file}.bak" "$geosite_file"
+            log_warn "GeoSite 校验失败，已回滚到旧库"
+        fi
+        return 1
+    fi
+
     local new_size
     new_size=$(du -h "$geosite_file" | cut -f1)
     log_info "GeoSite 已更新 ($new_size)"
+}
+
+# ===== 校验 =====
+
+# verify_config - 用 mihomo 自身校验配置（含刚换进去的数据库），通过返回 0
+# 注意：mihomo -t 测试失败时退出码仍可能是 0，必须看输出行
+verify_config() {
+    local out
+    out=$(timeout 30 "$MIHOMO_BIN" -t -d "$CONFIG_DIR" 2>&1 || true)
+    if printf '%s\n' "$out" | grep -q "test is successful"; then
+        return 0
+    fi
+    log_error "mihomo -t 校验未通过，末尾输出："
+    printf '%s\n' "$out" | tail -5 | sed 's/^/      /'
+    return 1
 }
 
 # ===== 辅助函数 =====
