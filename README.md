@@ -242,6 +242,9 @@ mihomo-uninstall
 - 🔒 **下载内容校验**: `curl -f` 拒绝 4xx/5xx，再按类型校验（MMDB 体积 + 尾部 `MaxMind.com` 标记、`.dat` 体积 + 拒绝 HTML 页、gzip 流完整性），不合格不落盘
 - 🔒 **原子替换 + 失败回滚**: 临时文件与目标同目录（`mv` 为原子改名，不会留下半截文件），替换后跑 `mihomo -t` 校验，失败自动回滚 `.bak`
 - ⏱️ **启动前更新限时 25s**: `ExecStartPre` 的更新脚本自带硬预算，避开 systemd `TimeoutStartSec=30`，镜像全部超时也不会拖垮服务启动
+- 🐛 **TUN 服务模板修复**: `templates/mihomo-tun.service` 去掉 `User=`/`Group=`、`ip tuntap/addr/link` 预处理与 `*_PROXY` 环境变量——此前 `setup-service.sh tun` 会装出起不来的 unit（`TUNSETIFF` 需要 CAP_NET_ADMIN，`-` 前缀把 ip 命令的失败藏起来；代理变量让启动前的下载去连还没起来的 7890）。普通模式 `mihomo.service` 保留 `User=`，它不需要 TUN
+- 🛡️ **服务安装自检**: 新增 `assert_service_unit_safe` / `write_service_unit`（`lib/service.sh`），渲染结果不合法（TUN 模式带 `User=`、预建网卡、代理变量，或残留 `{PLACEHOLDER}`）直接拒绝写入；`install.sh` 的 4 处渲染与 `install_service` 全部走同一入口
+- ✅ **回归测试**: `scripts/test-service-template.sh` 干跑验证模板与安装流程（不写 `/etc/systemd`），18 项断言
 
 ### v2.0.0 (2026-07-18)
 

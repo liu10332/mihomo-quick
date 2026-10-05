@@ -37,6 +37,90 @@ if [[ -z "$SERVICE_FILE_MIHOMO" ]]; then
     SERVICE_FILE_TUN="${SCRIPT_LIB_DIR}/../systemd/mihomo-tun.service"
 fi
 
+# ===== 服务模板渲染与自检 =====
+
+# assert_service_unit_safe FILE MODE
+# 渲染结果自检：坏 unit 不如不装。MODE = normal | tun
+# 背景：TUN 模板曾带 User={USER} + `ip tuntap` 预处理 + *_PROXY 环境变量，
+# 跑 setup-service.sh tun 会装出一个起不来的服务（TUNSETIFF 需要 root，
+# `-` 前缀把 ip 命令的失败藏起来，代理环境变量让启动前的下载连不上还没起来的 7890）。
+assert_service_unit_safe() {
+    local file="$1" mode="${2:-normal}" content
+
+    if [[ ! -f "$file" ]]; then
+        log_error "服务文件不存在: $file"
+        return 1
+    fi
+
+    # 注释行不参与检查（注释里可能字面提到 User= / ip tuntap）
+    content=$(grep -vE '^[[:space:]]*[#;]' "$file" 2>/dev/null || true)
+
+    if [[ "$mode" == "tun" ]]; then
+        if printf '%s\n' "$content" | grep -qE '^[[:space:]]*(User|Group)='; then
+            log_error "拒绝安装: TUN 模式不能指定 User=/Group=（TUNSETIFF 与 auto-route 需要 root，普通用户报 Operation not permitted）"
+            return 1
+        fi
+        if printf '%s\n' "$content" | grep -qE '^Exec(StartPre|StopPost)=.*(ip[[:space:]]+(tuntap|addr|link))'; then
+            log_error "拒绝安装: TUN 模板不要预建/清理网卡（设备由 mihomo 自己创建，带 '-' 的 ip 命令只会掩盖失败）"
+            return 1
+        fi
+        if printf '%s\n' "$content" | grep -qiE '^Environment=.*_PROXY='; then
+            log_error "拒绝安装: TUN 模板不能设置 *_PROXY（启动前的下载会去连还没启动的代理端口）"
+            return 1
+        fi
+    fi
+
+    local leftover
+    leftover=$(printf '%s\n' "$content" | grep -o '{[A-Z_]*}' 2>/dev/null | sort -u | tr '\n' ' ' || true)
+    if [[ -n "${leftover// /}" ]]; then
+        log_error "拒绝安装: 模板仍有未替换占位符: $leftover"
+        return 1
+    fi
+
+    return 0
+}
+
+# write_service_unit TEMPLATE TARGET MODE USER BIN_DIR [TUN_DEVICE] [TUN_GATEWAY]
+# 渲染模板 → 自检 → 写入 TARGET → daemon-reload。自检不过则不写入，返回 1。
+write_service_unit() {
+    local template="$1" target="$2" mode="$3" unit_user="$4" bin_dir="$5"
+    local tun_device="${6:-}" tun_gateway="${7:-}"
+    local rendered rc
+
+    if [[ ! -f "$template" ]]; then
+        log_error "服务模板不存在: $template"
+        return 1
+    fi
+
+    rendered=$(mktemp) || return 1
+
+    sed -e "s/{USER}/$unit_user/g" \
+        -e "s|{HOME}|$HOME|g" \
+        -e "s|{BIN_DIR}|$bin_dir|g" \
+        -e "s|{CONFIG_DIR}|$CONFIG_DIR|g" \
+        -e "s/{TUN_DEVICE}/$tun_device/g" \
+        -e "s/{TUN_GATEWAY}/$tun_gateway/g" \
+        -e "s|/root|$HOME|g" \
+        "$template" > "$rendered"
+
+    if ! assert_service_unit_safe "$rendered" "$mode"; then
+        rm -f "$rendered"
+        log_error "已中止，未写入 $target"
+        return 1
+    fi
+
+    sudo tee "$target" < "$rendered" > /dev/null
+    rc=$?
+    rm -f "$rendered"
+    if [[ $rc -ne 0 ]]; then
+        log_error "写入失败: $target"
+        return 1
+    fi
+
+    sudo systemctl daemon-reload
+    return 0
+}
+
 # ===== systemd 状态查询 =====
 
 # get_service_status [服务名]
@@ -139,20 +223,16 @@ install_service() {
     fi
 
     # 变量替换: 填充模板占位符(与 install.sh 保持一致)，并兼容旧模板的 /root 硬编码
+    # 渲染 → 自检（坏 unit 直接拒绝）→ 写入 → daemon-reload 都在 write_service_unit 里
     local svc_user svc_tun_device svc_bin_dir
     svc_user=$(detect_current_user)
     svc_tun_device=$(detect_tun_device)
     svc_bin_dir="$HOME/.local/bin"
 
-    sudo sed -e "s/{USER}/$svc_user/g" \
-        -e "s|{HOME}|$HOME|g" \
-        -e "s|{BIN_DIR}|$svc_bin_dir|g" \
-        -e "s|{CONFIG_DIR}|$CONFIG_DIR|g" \
-        -e "s/{TUN_DEVICE}/$svc_tun_device/g" \
-        -e "s/{TUN_GATEWAY}/10.0.0.1/g" \
-        -e "s|/root|$HOME|g" \
-        "$service_file" | sudo tee "$target" > /dev/null
-    sudo systemctl daemon-reload
+    if ! write_service_unit "$service_file" "$target" "$mode" "$svc_user" "$svc_bin_dir" \
+            "$svc_tun_device" "10.0.0.1"; then
+        return 1
+    fi
     log_info "服务已安装: $target"
 
     # 启用开机自启

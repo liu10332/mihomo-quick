@@ -5,24 +5,26 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User={USER}
-Group={USER}
 
-# 启动前创建 TUN 设备
-ExecStartPre=-/sbin/ip tuntap add {TUN_DEVICE} mode tun
-ExecStartPre=-/sbin/ip addr add {TUN_GATEWAY}/24 dev {TUN_DEVICE}
-ExecStartPre=-/sbin/ip link set {TUN_DEVICE} up
-
+# 必须以 root 运行：创建 TUN 设备 (TUNSETIFF) 和 auto-route 改路由表需要
+# CAP_NET_ADMIN。加 User={USER} 会让 mihomo 建网卡时报
+# "Operation not permitted"，服务起不来（普通模式的 mihomo.service 才用 User=）。
+#
+# 不要预先 `ip tuntap add / addr / link`：设备由 mihomo 自己创建、进程退出即销毁，
+# 这些命令带 `-` 前缀只会把失败藏起来，网卡其实从来没建出来。
+#
+# 不要设置 HTTP_PROXY / ALL_PROXY：ExecStartPre 的更新脚本会去连一个还没起来的
+# 7890 端口，下载必然失败；mihomo 自身流量也不该先绕自己一圈。
 ExecStartPre=-{BIN_DIR}/mihomo-auto-update
 ExecStart={BIN_DIR}/mihomo-core -d {CONFIG_DIR}
 ExecReload=/bin/kill -HUP $MAINPID
 
-# 停止后清理 TUN 设备
-ExecStopPost=-/sbin/ip tuntap del {TUN_DEVICE} mode tun
-
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
+# ExecStartPre 的更新脚本自带 25s 硬预算，必须小于这里：
+# `-` 前缀只忽略退出码，不忽略启动超时，脚本一旦拖过 TimeoutStartSec
+# 整个启动作业会被判失败。
 TimeoutStartSec=30
 SuccessExitStatus=0 143
 KillMode=control-group
@@ -30,12 +32,6 @@ LimitNOFILE=65535
 
 Environment=HOME={HOME}
 Environment=TMPDIR=/tmp
-Environment=HTTP_PROXY=http://127.0.0.1:7890
-Environment=HTTPS_PROXY=http://127.0.0.1:7890
-Environment=ALL_PROXY=socks5://127.0.0.1:7891
-Environment=http_proxy=http://127.0.0.1:7890
-Environment=https_proxy=http://127.0.0.1:7890
-Environment=all_proxy=socks5://127.0.0.1:7891
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 StandardOutput=journal

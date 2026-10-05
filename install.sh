@@ -390,24 +390,16 @@ install_services() {
         if [[ -f "$target" ]]; then
             if confirm "是否覆盖更新 mihomo 服务？" "n"; then
                 backup_file "$target"
-                sed -e "s/{USER}/$user/g" \
-                    -e "s|{HOME}|$HOME|g" \
-                    -e "s|{BIN_DIR}|$bin_dir|g" \
-                    -e "s|{CONFIG_DIR}|$CONFIG_DIR|g" \
-                    "$SCRIPT_DIR/templates/mihomo.service" | sudo tee "$target" > /dev/null
-                sudo systemctl daemon-reload
-                log_info "mihomo 服务已更新"
+                if write_service_unit "$SCRIPT_DIR/templates/mihomo.service" "$target" normal "$user" "$bin_dir"; then
+                    log_info "mihomo 服务已更新"
+                fi
             else
                 echo "   保留现有 mihomo 服务"
             fi
         else
-            sed -e "s/{USER}/$user/g" \
-                -e "s|{HOME}|$HOME|g" \
-                -e "s|{BIN_DIR}|$bin_dir|g" \
-                -e "s|{CONFIG_DIR}|$CONFIG_DIR|g" \
-                "$SCRIPT_DIR/templates/mihomo.service" | sudo tee "$target" > /dev/null
-            sudo systemctl daemon-reload
-            log_info "mihomo 服务已创建"
+            if write_service_unit "$SCRIPT_DIR/templates/mihomo.service" "$target" normal "$user" "$bin_dir"; then
+                log_info "mihomo 服务已创建"
+            fi
         fi
     fi
 
@@ -421,28 +413,16 @@ install_services() {
         if [[ -f "$target" ]]; then
             if confirm "是否覆盖更新 mihomo-tun 服务？" "n"; then
                 backup_file "$target"
-                sed -e "s/{USER}/$user/g" \
-                    -e "s|{HOME}|$HOME|g" \
-                    -e "s|{BIN_DIR}|$bin_dir|g" \
-                    -e "s|{CONFIG_DIR}|$CONFIG_DIR|g" \
-                    -e "s/{TUN_DEVICE}/$tun_device/g" \
-                    -e "s/{TUN_GATEWAY}/$tun_gateway/g" \
-                    "$SCRIPT_DIR/templates/mihomo-tun.service" | sudo tee "$target" > /dev/null
-                sudo systemctl daemon-reload
-                log_info "mihomo-tun 服务已更新"
+                if write_service_unit "$SCRIPT_DIR/templates/mihomo-tun.service" "$target" tun "$user" "$bin_dir" "$tun_device" "$tun_gateway"; then
+                    log_info "mihomo-tun 服务已更新"
+                fi
             else
                 echo "   保留现有 mihomo-tun 服务"
             fi
         else
-            sed -e "s/{USER}/$user/g" \
-                -e "s|{HOME}|$HOME|g" \
-                -e "s|{BIN_DIR}|$bin_dir|g" \
-                -e "s|{CONFIG_DIR}|$CONFIG_DIR|g" \
-                -e "s/{TUN_DEVICE}/$tun_device/g" \
-                -e "s/{TUN_GATEWAY}/$tun_gateway/g" \
-                "$SCRIPT_DIR/templates/mihomo-tun.service" | sudo tee "$target" > /dev/null
-            sudo systemctl daemon-reload
-            log_info "mihomo-tun 服务已创建"
+            if write_service_unit "$SCRIPT_DIR/templates/mihomo-tun.service" "$target" tun "$user" "$bin_dir" "$tun_device" "$tun_gateway"; then
+                log_info "mihomo-tun 服务已创建"
+            fi
         fi
     fi
 
